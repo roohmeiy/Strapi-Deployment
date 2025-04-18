@@ -43,7 +43,7 @@ jobs:
             docker run -d \
               --name strapi \
               -p 1337:1337 \
-              ${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com/strapi:${{ github.event.inputs.image_tag }}
+              ${ secrets.AWS_ACCOUNT_ID }.dkr.ecr.${ secrets.AWS_REGION }.amazonaws.com/strapi:${{ github.event.inputs.image_tag }}
           '
 
           # Use SSH to execute the commands
