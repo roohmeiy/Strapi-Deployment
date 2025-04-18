@@ -24,26 +24,32 @@ jobs:
           ssh-private-key: ${{ secrets.SSH_PRIVATE_KEY }}
           
       - name: Run commands on EC2 via SSH
+        env:
+          ECR_URL: "${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.${{ secrets.AWS_REGION }}.amazonaws.com"
+          IMAGE_TAG: "${{ github.event.inputs.image_tag }}"
         run: |
-          COMMANDS='
-            #!/bin/bash
+          ssh -o StrictHostKeyChecking=no ubuntu@${{ secrets.EC2_INSTANCE_PUBLIC_IP }} "
             set -e
             
             # Navigate to the Strapi application directory
+            mkdir -p /home/ubuntu/strapi
             cd /home/ubuntu/strapi || exit
             
+            # Login to ECR
+            aws ecr get-login-password --region ${{ secrets.AWS_REGION }} | docker login --username AWS --password-stdin ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.${{ secrets.AWS_REGION }}.amazonaws.com
+            
             # Check if the Strapi container already exists and remove it
-            if [ "$(docker ps -aq -f name=strapi)" ]; then
-              echo "Removing existing Strapi container..."
+            if [ \"\$(docker ps -aq -f name=strapi)\" ]; then
+              echo \"Removing existing Strapi container...\"
               docker rm -f strapi || true
             fi
             
             # Run the Strapi container in detached mode
-            echo "Running Strapi container..."
-            docker run -d \
-              --name strapi \
-              -p 1337:1337 \
-              ${ secrets.AWS_ACCOUNT_ID }.dkr.ecr.${ secrets.AWS_REGION }.amazonaws.com/strapi:${{ github.event.inputs.image_tag }}
+            echo \"Running Strapi container...\"
+            docker run -d \\
+              --name strapi \\
+              -p 1337:1337 \\
+              ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.${{ secrets.AWS_REGION }}.amazonaws.com/strapi:${{ github.event.inputs.image_tag }}
           '
 
           # Use SSH to execute the commands
