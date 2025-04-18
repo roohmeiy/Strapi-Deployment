@@ -19,15 +19,13 @@ jobs:
       - name: Log in to Docker Hub
         uses: docker/login-action@v1
         with:
-          username: ${{ secrets.DOCKER_HUB_USERNAME }}
+          username: roohmeiy
           password: ${{ secrets.DOCKER_HUB_TOKEN }}
 
       - name: Build and Push Docker image
-        env:
-          IMAGE_NAME: my-strapi-app
-          IMAGE_TAG: ${{ github.sha }}   # Use the commit SHA as the tag
-          FULL_IMAGE_NAME: ${{ secrets.DOCKER_HUB_USERNAME }}/$IMAGE_NAME:$IMAGE_TAG
-        run: |
-          docker build -t $FULL_IMAGE_NAME .
-          docker push $FULL_IMAGE_NAME
-          echo "IMAGE_TAG=$IMAGE_TAG" >> $GITHUB_ENV  # Save the image tag to the environment
+        run: |                 
+           IMAGE_NAME="my-strapi-app"                            
+           IMAGE_TAG="${GITHUB_SHA::7}"                     
+           build -t roohmeiy/$IMAGE_NAME:$IMAGE_TAG .     
+           docker push roohmeiy/$IMAGE_NAME:$IMAGE_TAG           
+           echo "IMAGE_TAG=$IMAGE_TAG" >> $GITHUB_ENV        

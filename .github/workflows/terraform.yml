@@ -2,6 +2,7 @@ name: CD Pipeline
 
 on:
   workflow_dispatch:  
+
 jobs:
   deploy:
     runs-on: ubuntu-latest
@@ -13,30 +14,32 @@ jobs:
       - name: Log in to Docker Hub
         uses: docker/login-action@v1
         with:
-          username: ${{ secrets.DOCKER_HUB_USERNAME }}
+          username: roohmeiy
           password: ${{ secrets.DOCKER_HUB_TOKEN }}
 
       - name: Pull and deploy Docker image
         env:
-          EC2_HOST: ${{ secrets.EC2_INSTANCE_PUBLIC_IP }}
+          EC2_HOST: ${{ secrets.EC2_INSTANCE_PUBLIC_IP }}  
           EC2_USER: ${{ secrets.EC2_USER }}
           EC2_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
-          IMAGE_NAME: my-strapi-app
-          IMAGE_TAG: ${{ github.event.inputs.image_tag }}  # Input the image tag for deployment
         run: |
-          # SSH into EC2 and manage Docker container
-          ssh -i <(echo "$EC2_PRIVATE_KEY") -o StrictHostKeyChecking=no ${EC2_USER}@${EC2_HOST} << 'EOF'
-            CONTAINER_NAME=my-strapi-app
-            
+          IMAGE_NAME="my-strapi-app"                       
+          IMAGE_TAG="${{ github.event.inputs.image_tag }}"  
+
+          # SSH into EC2 and manage Docker containers
+          ssh -i <(echo "$EC2_PRIVATE_KEY") -o StrictHostKeyChecking=no ${EC2_USER}@${EC2_HOST} << EOF
+            # Export variables into the SSH session
+            export IMAGE_NAME="$IMAGE_NAME"
+            export IMAGE_TAG="$IMAGE_TAG"
+            CONTAINER_NAME="my-strapi-app"
+
             # Stop and remove the existing container if it exists
-            docker ps -q -f name=$CONTAINER_NAME | grep -q . && { 
-              echo "Stopping and removing existing container..."; 
-              docker stop $CONTAINER_NAME && docker rm $CONTAINER_NAME; 
-            }
+            if [ "\$(docker ps -q -f name=\$CONTAINER_NAME)" ]; then
+              echo "Stopping and removing existing container..."
+              docker stop \$CONTAINER_NAME
+              docker rm \$CONTAINER_NAME
+            fi
             
-            # Pull the new image and run a new instance
-            echo "Pulling new image ${IMAGE_NAME}:${IMAGE_TAG}..."
-            docker pull ${IMAGE_NAME}:${IMAGE_TAG}
-            echo "Running new container..."
-            docker run -d --name $CONTAINER_NAME -p 1337:1337 ${IMAGE_NAME}:${IMAGE_TAG}
+            docker pull roohmeiy/\$IMAGE_NAME:\$IMAGE_TAG
+            docker run -d --name \$CONTAINER_NAME -p 1337:1337 roohmeiy/\$IMAGE_NAME:\$IMAGE_TAG      
           EOF
