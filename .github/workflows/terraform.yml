@@ -1,8 +1,7 @@
 name: CD Pipeline
 
 on:
-  workflow_dispatch:  # Manually trigger the pipeline
-
+  workflow_dispatch:  
 jobs:
   deploy:
     runs-on: ubuntu-latest
@@ -23,24 +22,21 @@ jobs:
           EC2_USER: ${{ secrets.EC2_USER }}
           EC2_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
           IMAGE_NAME: my-strapi-app
-          IMAGE_TAG: ${{ github.sha }}  # Use the latest commit hash as the tag
+          IMAGE_TAG: ${{ github.event.inputs.image_tag }}  # Input the image tag for deployment
         run: |
-          # SSH into EC2 and remove the old container, then run the new one
+          # SSH into EC2 and manage Docker container
           ssh -i <(echo "$EC2_PRIVATE_KEY") -o StrictHostKeyChecking=no ${EC2_USER}@${EC2_HOST} << 'EOF'
             CONTAINER_NAME=my-strapi-app
             
-            # Check if the container exists and remove it
-            if [ "$(docker ps -q -f name=$CONTAINER_NAME)" ]; then
-              echo "Stopping and removing existing container..."
-              docker stop $CONTAINER_NAME
-              docker rm $CONTAINER_NAME
-            fi
+            # Stop and remove the existing container if it exists
+            docker ps -q -f name=$CONTAINER_NAME | grep -q . && { 
+              echo "Stopping and removing existing container..."; 
+              docker stop $CONTAINER_NAME && docker rm $CONTAINER_NAME; 
+            }
             
-            # Pull the new image from Docker Hub
-            echo "Pulling new image... (${IMAGE_NAME}:${IMAGE_TAG})"
+            # Pull the new image and run a new instance
+            echo "Pulling new image ${IMAGE_NAME}:${IMAGE_TAG}..."
             docker pull ${IMAGE_NAME}:${IMAGE_TAG}
-            
-            # Run the new container
             echo "Running new container..."
             docker run -d --name $CONTAINER_NAME -p 1337:1337 ${IMAGE_NAME}:${IMAGE_TAG}
           EOF
