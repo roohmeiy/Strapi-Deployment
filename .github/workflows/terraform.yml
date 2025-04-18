@@ -11,23 +11,34 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v2
 
+      - name: Setup SSH
+        uses: webfactory/ssh-agent@v0.5.3
+        with:
+          ssh-private-key: ${{ secrets.SSH_PRIVATE_KEY }}
+
+      - name: Download IMAGE_TAG artifact
+        uses: actions/download-artifact@v2
+        with:
+          name: image-tag  
+
+      - name: Set Environment Variable from IMAGE_TAG
+        id: set-image-tag
+        run: |
+          IMAGE_TAG=$(cat image_tag.txt)
+          echo "IMAGE_TAG=$IMAGE_TAG" >> $GITHUB_ENV
+
       - name: Log in to Docker Hub
         uses: docker/login-action@v1
         with:
           username: roohmeiy
           password: ${{ secrets.DOCKER_HUB_TOKEN }}
 
-      - name: Pull and deploy Docker image
-        env:
-          EC2_HOST: ${{ secrets.EC2_INSTANCE_PUBLIC_IP }}  
-          EC2_USER: ${{ secrets.EC2_USER }}
-          EC2_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
+      - name: Run commands on EC2 via SSH
         run: |
-          IMAGE_NAME="my-strapi-app"                       
-          IMAGE_TAG="${{ github.event.inputs.image_tag }}"  
-
-          # SSH into EC2 and manage Docker containers
-          ssh -i <(echo "$EC2_PRIVATE_KEY") -o StrictHostKeyChecking=no ${EC2_USER}@${EC2_HOST} << EOF
+          IMAGE_NAME="my-strapi-app"
+          IMAGE_TAG="${{ env.IMAGE_TAG }}"
+          
+          ssh -o StrictHostKeyChecking=no ubuntu@${{ secrets.EC2_INSTANCE_PUBLIC_IP }} << EOF
             # Export variables into the SSH session
             export IMAGE_NAME="$IMAGE_NAME"
             export IMAGE_TAG="$IMAGE_TAG"
@@ -40,6 +51,7 @@ jobs:
               docker rm \$CONTAINER_NAME
             fi
             
+            # Pull and run the Docker container
             docker pull roohmeiy/\$IMAGE_NAME:\$IMAGE_TAG
             docker run -d --name \$CONTAINER_NAME -p 1337:1337 roohmeiy/\$IMAGE_NAME:\$IMAGE_TAG      
           EOF

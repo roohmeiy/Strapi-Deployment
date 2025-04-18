@@ -28,4 +28,11 @@ jobs:
            IMAGE_TAG="${GITHUB_SHA::7}"                     
            docker build -t roohmeiy/$IMAGE_NAME:$IMAGE_TAG .     
            docker push roohmeiy/$IMAGE_NAME:$IMAGE_TAG           
-           echo "IMAGE_TAG=$IMAGE_TAG" >> $GITHUB_ENV        
+           echo "IMAGE_TAG=$IMAGE_TAG" >> $GITHUB_ENV  
+           echo "$IMAGE_TAG" > image_tag.txt       
+
+      - name: Upload IMAGE_TAG artifact
+        uses: actions/upload-artifact@v2
+        with:
+          name: image-tag
+          path: image_tag.txt      
