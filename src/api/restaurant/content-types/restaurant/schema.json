@@ -1,0 +1,20 @@
+{
+  "kind": "collectionType",
+  "collectionName": "restaurants",
+  "info": {
+    "singularName": "restaurant",
+    "pluralName": "restaurants",
+    "displayName": "restaurant"
+  },
+  "options": {
+    "draftAndPublish": true
+  },
+  "attributes": {
+    "restaurantName": {
+      "type": "string"
+    },
+    "description": {
+      "type": "text"
+    }
+  }
+}
