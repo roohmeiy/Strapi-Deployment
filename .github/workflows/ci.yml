@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - main
+      - .github/latest-image-tag.txt
 
 jobs:
   build-push:
@@ -28,16 +29,13 @@ jobs:
           IMAGE_TAG="${GITHUB_SHA::7}"
           docker build -t roohmeiy/$IMAGE_NAME:$IMAGE_TAG .
           docker push roohmeiy/$IMAGE_NAME:$IMAGE_TAG
+          mkdir -p .github
+          echo "$IMAGE_TAG" > .github/latest-image-tag.txt
 
-          # Create a text file with the IMAGE_TAG
-          echo "$IMAGE_TAG" > image_tag.txt       
-
-      - name: Check IMAGE_TAG file content 
+      - name: Commit and push updated image tag
         run: |
-          cat image_tag.txt
-
-      - name: Upload IMAGE_TAG artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: image-tag  
-          path: image_tag.txt
+          git config user.name "Payal"
+          git config user.email "roohmeiy@gmail.com"
+          git add .github/latest-image-tag.txt
+          git commit -m "Update latest image tag [skip ci]" || echo "No changes to commit"
+          git push
