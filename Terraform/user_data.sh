@@ -1,21 +1,21 @@
-#!/bin/bash
-sudo apt-get update
-sudo apt-get upgrade -y
+# Update system
+echo "Updating system packages..."
+apt-get update
 
-# Install Docker
-sudo apt-get install -y docker.io
-sudo systemctl start docker
-sudo systemctl enable docker
+echo "Installing Docker..."
+apt-get install -y docker.io
 
-# Add the ec2-user to the docker group (for non-root access)
-sudo usermod -aG docker $USER
+apt-get install -y git vim curl wget build-essential
 
-# Make sure Docker is started
-sudo service docker start
+# Start and enable Docker
+echo "Starting Docker service..."
+systemctl start docker
+systemctl enable docker
 
-# Pull and run the Docker image
-$(aws ecr get-login --no-include-email --region ${var.aws_region})
-docker run -d \
---name strapi \
--p 1337:1337 \
-${var.aws_account_id}.dkr.ecr.${var.aws_region}.amazonaws.com/strapi:${var.image_tag}
+# Add ubuntu user to docker group
+echo "Adding ubuntu user to docker group..."
+usermod -aG docker ubuntu
+
+# Create workspace directory
+echo "Creating workspace directory..."
+mkdir -p /home/ubuntu/strapi

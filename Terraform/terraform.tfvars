@@ -1,6 +1,4 @@
 aws_region = "us-east-1"
-instance_type = "t2.micro"
+instance_type = "t2.medium"
 ami_id = "ami-084568db4383264d4"
-s3_bucket_name = "payal-strapi-bucket"
-dynamodb_table_name = "payal-strapi-dynamodb-table"
 ecr_repository_name = "payal/strapi-repo"

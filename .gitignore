@@ -1,0 +1,46 @@
+node_modules/
+
+# Build output
+.build/
+dist/
+
+# System files
+.DS_Store
+Thumbs.db
+
+# Environment files
+.env
+.env.*
+
+# Logs
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# SQLite DB
+*.sqlite
+*.sqlite-journal
+
+# OS swap files
+*.swp
+*.swo
+
+# IDE files
+.vscode/
+.idea/
+
+# Strapi specific
+.cache/
+.tmp/
+
+# TypeScript cache
+tsconfig.tsbuildinfo
+
+# Terraform-related
+Terraform/.terraform/
+Terraform/.terraform.lock.hcl
+*.tfstate
+*.tfstate.*
+
+# SSH key
+Terraform/payal-rsa.pub

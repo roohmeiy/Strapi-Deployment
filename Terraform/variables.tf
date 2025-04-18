@@ -8,21 +8,12 @@ variable "instance_type" {
   default     = "t2.micro"  # Default can be overridden
 }
 
-variable "s3_bucket_name" {
-  description = "The name of the S3 bucket for the Terraform state."
-  type        = string
-}
-
 variable "aws_region" {
   description = "The AWS region to deploy resources."
   type        = string
   default     = "us-east-1"  # Default can be overridden
 }
 
-variable "dynamodb_table_name" {
-  description = "The name of the DynamoDB table for Terraform state locking."
-  type        = string
-}
 variable "ecr_repository_name" {
     description = "Name of ecr repo"
     type = string  
