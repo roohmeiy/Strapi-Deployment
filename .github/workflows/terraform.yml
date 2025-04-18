@@ -1,10 +1,7 @@
+name: CD Pipeline
+
 on:
-  workflow_dispatch:
-    inputs:
-      custom_image_tag:
-        description: 
-        required: false
-        type: string
+  workflow_dispatch: 
 
 jobs:
   deploy:
@@ -28,9 +25,8 @@ jobs:
           
       - name: Run commands on EC2 via SSH
         run: |
-          # Use custom tag if provided, otherwise use the latest saved tag
-          IMAGE_TAG="${{ github.event.inputs.custom_image_tag || secrets.LATEST_IMAGE_TAG }}"
-          IMAGE_URL="${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.${{ secrets.AWS_REGION }}.amazonaws.com/strapi:${IMAGE_TAG}"
+          # Use the latest saved tag from repository secrets
+          IMAGE_TAG="${{ secrets.LATEST_IMAGE_TAG }}"
           
           echo "Deploying image tag: ${IMAGE_TAG}"
           
