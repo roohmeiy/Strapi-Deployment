@@ -40,4 +40,5 @@ jobs:
           git config user.email "roohmeiy@gmail.com"
           git add .github/latest-image-tag.txt
           git commit -m "Update latest image tag [skip ci]" || echo "No changes to commit"
+          git remote set-url origin https://x-access-token:${{ secrets.PAT_TOKEN }}@github.com/${{ github.repository }}
           git push
