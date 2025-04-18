@@ -35,14 +35,14 @@ jobs:
         id: build_tag
         run: |
           IMAGE_TAG=$(echo $GITHUB_SHA | cut -c1-7)-$(date +%s)
-          echo "image_tag=${IMAGE_TAG}" >> $GITHUB_ENV
+          echo "image_tag=${IMAGE_TAG}" >> $GITHUB_OUTPUT
           echo "Generated image tag: ${IMAGE_TAG}"
       
       - name: Build and push Docker image
         env:
           ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
           ECR_REPOSITORY: ${{ secrets.ECR_REPOSITORY_NAME }}
-          IMAGE_TAG: ${{ env.image_tag }}
+          IMAGE_TAG: ${{ steps.build_tag.outputs.image_tag }}
         run: |
           set -e  # Exit immediately if a command exits with a non-zero status
           docker build -t "$ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG" -t "$ECR_REGISTRY/$ECR_REPOSITORY:latest" .
