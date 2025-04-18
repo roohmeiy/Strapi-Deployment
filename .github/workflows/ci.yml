@@ -29,12 +29,11 @@ jobs:
           FULL_IMAGE_NAME=${{ secrets.DOCKER_HUB_USERNAME }}/$IMAGE_NAME:$IMAGE_TAG
           
           docker build -t $FULL_IMAGE_NAME .
-          echo "FULL_IMAGE_NAME=$FULL_IMAGE_NAME" >> $GITHUB_ENV
-          echo "IMAGE_TAG=$IMAGE_TAG" >> $GITHUB_ENV
+          echo "IMAGE_TAG=$IMAGE_TAG" >> $GITHUB_ENV  # Save the image tag to the environment
 
       - name: Push Docker image
         run: |
-          docker push ${{ env.FULL_IMAGE_NAME }}
+          docker push $FULL_IMAGE_NAME
 
       - name: Set output for image tag
-        run: echo "::set-output name=image_tag::${{ env.image_tag }}"
+        run: echo "::set-output name=image_tag::${{ env.IMAGE_TAG }}"

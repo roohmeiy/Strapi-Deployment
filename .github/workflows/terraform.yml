@@ -1,12 +1,7 @@
 name: CD Pipeline
 
 on:
-  workflow_dispatch:
-    inputs:
-      image_tag:
-        description: 'Docker image tag to deploy'
-        required: true
-        default: 'latest'
+  workflow_dispatch:  # Manually trigger the pipeline
 
 jobs:
   deploy:
@@ -16,36 +11,36 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v2
 
-      - name: Remove old container and deploy new one
+      - name: Log in to Docker Hub
+        uses: docker/login-action@v1
+        with:
+          username: ${{ secrets.DOCKER_HUB_USERNAME }}
+          password: ${{ secrets.DOCKER_HUB_TOKEN }}
+
+      - name: Pull and deploy Docker image
         env:
           EC2_HOST: ${{ secrets.EC2_INSTANCE_PUBLIC_IP }}
           EC2_USER: ${{ secrets.EC2_USER }}
           EC2_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
-          DOCKERHUB_USERNAME: ${{ secrets.DOCKER_HUB_USERNAME }}
           IMAGE_NAME: my-strapi-app
-          IMAGE_TAG: ${{ github.event.inputs.image_tag }}
+          IMAGE_TAG: ${{ github.sha }}  # Use the latest commit hash as the tag
         run: |
-          # Create a temporary SSH key file
-          echo "${EC2_PRIVATE_KEY}" > private_key.pem
-          chmod 600 private_key.pem
-
           # SSH into EC2 and remove the old container, then run the new one
-          ssh -i private_key.pem -o StrictHostKeyChecking=no ${EC2_USER}@${EC2_HOST} << EOF
+          ssh -i <(echo "$EC2_PRIVATE_KEY") -o StrictHostKeyChecking=no ${EC2_USER}@${EC2_HOST} << 'EOF'
             CONTAINER_NAME=my-strapi-app
-            FULL_IMAGE_NAME=${DOCKERHUB_USERNAME}/${IMAGE_NAME}:${IMAGE_TAG}
-
-            # Stop and remove existing container if it exists
-            if [ "\$(docker ps -q -f name=\$CONTAINER_NAME)" ]; then
+            
+            # Check if the container exists and remove it
+            if [ "$(docker ps -q -f name=$CONTAINER_NAME)" ]; then
               echo "Stopping and removing existing container..."
-              docker stop \$CONTAINER_NAME
-              docker rm \$CONTAINER_NAME
+              docker stop $CONTAINER_NAME
+              docker rm $CONTAINER_NAME
             fi
-
+            
             # Pull the new image from Docker Hub
-            echo "Pulling new image: \$FULL_IMAGE_NAME"
-            docker pull \$FULL_IMAGE_NAME
-
+            echo "Pulling new image... (${IMAGE_NAME}:${IMAGE_TAG})"
+            docker pull ${IMAGE_NAME}:${IMAGE_TAG}
+            
             # Run the new container
             echo "Running new container..."
-            docker run -d --name \$CONTAINER_NAME -p 1337:1337 \$FULL_IMAGE_NAME
+            docker run -d --name $CONTAINER_NAME -p 1337:1337 ${IMAGE_NAME}:${IMAGE_TAG}
           EOF
