@@ -1,11 +1,9 @@
-name: CD Pipeline
-
 on:
   workflow_dispatch:
     inputs:
-      image_tag:
-        description: 'Docker image tag to deploy'
-        required: true
+      custom_image_tag:
+        description: 
+        required: false
         type: string
 
 jobs:
@@ -30,9 +28,13 @@ jobs:
           
       - name: Run commands on EC2 via SSH
         run: |
-          IMAGE_URL="${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.${{ secrets.AWS_REGION }}.amazonaws.com/strapi:${{ github.event.inputs.image_tag }}"
+          # Use custom tag if provided, otherwise use the latest saved tag
+          IMAGE_TAG="${{ github.event.inputs.custom_image_tag || secrets.LATEST_IMAGE_TAG }}"
+          IMAGE_URL="${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.${{ secrets.AWS_REGION }}.amazonaws.com/strapi:${IMAGE_TAG}"
           
-          ssh -o StrictHostKeyChecking=no ubuntu@${{ secrets.EC2_INSTANCE_PUBLIC_IP }} << 'ENDSSH'
+          echo "Deploying image tag: ${IMAGE_TAG}"
+          
+          ssh -o StrictHostKeyChecking=no ubuntu@${{ secrets.EC2_INSTANCE_PUBLIC_IP }} << EOF
           set -e
           
           # Navigate to the Strapi application directory
@@ -43,18 +45,18 @@ jobs:
           aws ecr get-login-password --region ${{ secrets.AWS_REGION }} | docker login --username AWS --password-stdin ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.${{ secrets.AWS_REGION }}.amazonaws.com
           
           # Check if the Strapi container already exists and remove it
-          if [ "$(docker ps -aq -f name=strapi)" ]; then
+          if [ "\$(docker ps -aq -f name=strapi)" ]; then
             echo "Removing existing Strapi container..."
             docker rm -f strapi || true
           fi
           
           # Run the Strapi container in detached mode
-          echo "Running Strapi container..."
-          docker run -d \
-            --name strapi \
-            -p 1337:1337 \
-            ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.${{ secrets.AWS_REGION }}.amazonaws.com/strapi:${{ github.event.inputs.image_tag }}
+          echo "Running Strapi container with image tag: ${IMAGE_TAG}"
+          docker run -d \\
+            --name strapi \\
+            -p 1337:1337 \\
+            ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.${{ secrets.AWS_REGION }}.amazonaws.com/strapi:${IMAGE_TAG}
             
           # Verify the container is running
           docker ps | grep strapi
-          ENDSSH
+          EOF

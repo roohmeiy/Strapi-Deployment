@@ -49,3 +49,12 @@ jobs:
           docker push "$ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG"
           docker push "$ECR_REGISTRY/$ECR_REPOSITORY:latest"
           echo "Pushed image: $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG"
+      
+      # Save the image tag to a repository variable
+      - name: Save image tag to GitHub output
+        uses: gliech/create-github-secret-action@v1
+        with:
+          name: LATEST_IMAGE_TAG
+          value: ${{ steps.build_tag.outputs.image_tag }}
+          pa_token: ${{ secrets.PAT_TOKEN }} 
+
