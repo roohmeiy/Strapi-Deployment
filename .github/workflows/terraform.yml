@@ -1,7 +1,7 @@
 name: CD Pipeline
 
 on:
-  workflow_dispatch: 
+  workflow_dispatch: # Manual trigger with no inputs
 
 jobs:
   deploy:
@@ -18,41 +18,80 @@ jobs:
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: ${{ secrets.AWS_REGION }}
 
+      - name: Login to Amazon ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v1
+
       - name: Setup SSH
         uses: webfactory/ssh-agent@v0.5.3
         with:
           ssh-private-key: ${{ secrets.SSH_PRIVATE_KEY }}
           
-      - name: Run commands on EC2 via SSH
+      - name: Pull image, save to tar, and deploy to EC2
+        env:
+          ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+          ECR_REPOSITORY: ${{ secrets.ECR_REPOSITORY_NAME }}
+          IMAGE_TAG: ${{ secrets.LATEST_IMAGE_TAG }}
+          EC2_HOST: ${{ secrets.EC2_INSTANCE_PUBLIC_IP }}
         run: |
-          # Use the latest saved tag from repository secrets
-          IMAGE_TAG="${{ secrets.LATEST_IMAGE_TAG }}"
-          
           echo "Deploying image tag: ${IMAGE_TAG}"
           
-          ssh -o StrictHostKeyChecking=no ubuntu@${{ secrets.EC2_INSTANCE_PUBLIC_IP }} << EOF
+          # Pull the image locally in the GitHub runner
+          FULL_IMAGE_NAME="${ECR_REGISTRY}/${ECR_REPOSITORY}:${IMAGE_TAG}"
+          echo "Pulling image: ${FULL_IMAGE_NAME}"
+          docker pull ${FULL_IMAGE_NAME}
+          
+          # Save the image to a tar file
+          echo "Saving image to tar file..."
+          docker save ${FULL_IMAGE_NAME} -o strapi_image.tar
+          
+          # Create a deployment script
+          cat > deploy.sh << 'EOF'
+          #!/bin/bash
           set -e
           
-          # Navigate to the Strapi application directory
-          mkdir -p /home/ubuntu/strapi
-          cd /home/ubuntu/strapi
-
-          # Login to ECR
-          aws ecr get-login-password --region ${{ secrets.AWS_REGION }} | docker login --username AWS --password-stdin ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.${{ secrets.AWS_REGION }}.amazonaws.com
+          # Load the Docker image from tar
+          echo "Loading Docker image..."
+          docker load -i strapi_image.tar
+          
+          # Get the loaded image name
+          IMAGE_NAME=$(docker images --format "{{.Repository}}:{{.Tag}}" | head -n 1)
+          echo "Loaded image: ${IMAGE_NAME}"
           
           # Check if the Strapi container already exists and remove it
-          if [ "\$(docker ps -aq -f name=strapi)" ]; then
+          if [ "$(docker ps -aq -f name=strapi)" ]; then
             echo "Removing existing Strapi container..."
             docker rm -f strapi || true
           fi
           
           # Run the Strapi container in detached mode
-          echo "Running Strapi container with image tag: ${IMAGE_TAG}"
-          docker run -d \\
-            --name strapi \\
-            -p 1337:1337 \\
-            ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.${{ secrets.AWS_REGION }}.amazonaws.com/strapi:${IMAGE_TAG}
+          echo "Running Strapi container with image: ${IMAGE_NAME}"
+          docker run -d \
+            --name strapi \
+            -p 1337:1337 \
+            ${IMAGE_NAME}
             
           # Verify the container is running
           docker ps | grep strapi
           EOF
+          
+          # Make the script executable
+          chmod +x deploy.sh
+          
+          # Transfer the image tar file to EC2 (this may take a while)
+          echo "Transferring image to EC2 instance..."
+          scp -o StrictHostKeyChecking=no strapi_image.tar ubuntu@${EC2_HOST}:~/strapi_image.tar
+          
+          # Transfer the deployment script
+          scp -o StrictHostKeyChecking=no deploy.sh ubuntu@${EC2_HOST}:~/deploy.sh
+          
+          # Execute the deployment script
+          echo "Executing deployment script on EC2..."
+          ssh -o StrictHostKeyChecking=no ubuntu@${EC2_HOST} "bash ~/deploy.sh"
+          
+          # Clean up
+          echo "Cleaning up temporary files..."
+          rm -f strapi_image.tar deploy.sh
+          ssh -o StrictHostKeyChecking=no ubuntu@${EC2_HOST} "rm -f ~/strapi_image.tar ~/deploy.sh"
+          
+          echo "Deployment completed successfully!"
