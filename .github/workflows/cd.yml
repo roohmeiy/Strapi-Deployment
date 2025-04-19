@@ -42,13 +42,7 @@ jobs:
             CONTAINER_NAME="my-strapi-app"
             IMAGE_NAME="${{ env.IMAGE_NAME }}"
             IMAGE_TAG="${{ env.IMAGE_TAG }}"
-
-            # Stop and remove the existing container if it exists
-            if [ "$(docker ps -q -f name=$CONTAINER_NAME)" ]; then
-              echo "Stopping and removing existing container..."
-              docker stop $CONTAINER_NAME
-              docker rm $CONTAINER_NAME
-            fi
+            docker rm -f $CONTAINER_NAME || true
             
             # Pull and run the Docker container
             docker pull roohmeiy/$IMAGE_NAME:$IMAGE_TAG
