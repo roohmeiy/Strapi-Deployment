@@ -15,6 +15,7 @@ This project containerizes a Strapi CMS application using a multi-stage Dockerfi
     - ADMIN_JWT_SECRET
     - TRANSFER_TOKEN_SALT
     - APP_KEYS
+    - DOCKER_HUB_USER
  
 - To generate app keys- 
     ```bash

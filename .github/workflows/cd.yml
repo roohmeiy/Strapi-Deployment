@@ -25,7 +25,7 @@ jobs:
       - name: Log in to Docker Hub
         uses: docker/login-action@v1
         with:
-          username: roohmeiy
+          username: ${{ secrets.DOCKER_HUB_USER }}
           password: ${{ secrets.DOCKER_HUB_TOKEN }}
 
       - name: Run commands on EC2 via SSH
@@ -45,7 +45,7 @@ jobs:
             docker rm -f $CONTAINER_NAME || true
             
             # Pull and run the Docker container
-            docker pull roohmeiy/$IMAGE_NAME:$IMAGE_TAG
+            docker pull ${{ secrets.DOCKER_HUB_USER }}/$IMAGE_NAME:$IMAGE_TAG
             
             docker run -d --name $CONTAINER_NAME \
               -p 1337:1337 \
@@ -53,5 +53,5 @@ jobs:
               -e ADMIN_JWT_SECRET='${{ env.ADMIN_JWT_SECRET }}' \
               -e TRANSFER_TOKEN_SALT='${{ env.TRANSFER_TOKEN_SALT }}' \
               -e APP_KEYS='${{ env.APP_KEYS }}' \
-              roohmeiy/$IMAGE_NAME:$IMAGE_TAG
+              ${{ secrets.DOCKER_HUB_USER }}/$IMAGE_NAME:$IMAGE_TAG
           ENDSSH
