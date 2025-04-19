@@ -1,5 +1,7 @@
 # Strapi-Deployment
 
+This project containerizes a Strapi CMS application using a multi-stage Dockerfile and deploys it to an AWS EC2 instance using GitHub Actions. It uses build-time arguments to pass secrets like ADMIN_JWT_SECRET, API_TOKEN_SALT, and others, which can be securely managed through GitHub Action secrets. A short user-data script is used on the EC2 instance to generate SSH keys automatically, allowing GitHub Actions to connect and deploy the app.
+
 ## Prerequisites for running pipeline
 
 - Settings -> actions -> general -> Workflow permissions -> Read and write permissions
@@ -25,7 +27,7 @@
     ```
 - To view keys
     ```bash
-    cat ~/.ssh/my-ec2-key
-    cat ~/.ssh/my-ec2-key.pub
+    cat /home/ubuntu/.ssh/my-ec2-key
+    cat /home/ubuntu/.ssh/my-ec2-key.pub
     ```
     

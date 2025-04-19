@@ -38,11 +38,24 @@ systemctl enable docker
 echo "Adding ubuntu user to docker group..."
 usermod -aG docker ubuntu
 
-mkdir -p ~/.ssh
-ssh-keygen -t rsa -b 4096 -f ~/.ssh/my-ec2-key -N ""
 
-chmod 600 ~/.ssh/my-ec2-key
-chmod 644 ~/.ssh/my-ec2-key.pub
+USER_HOME="/home/ubuntu"
+SSH_DIR="$USER_HOME/.ssh"
 
-cat ~/.ssh/my-ec2-key.pub >> ~/.ssh/authorized_keys
-chmod 600 ~/.ssh/authorized_keys
+# Create SSH directory if not exists
+mkdir -p "$SSH_DIR"
+
+# Generate RSA key pair
+ssh-keygen -t rsa -b 4096 -f "$SSH_DIR/my-ec2-key" -N ""
+
+# Set appropriate permissions
+chmod 600 "$SSH_DIR/my-ec2-key"
+chmod 644 "$SSH_DIR/my-ec2-key.pub"
+
+# Add public key to authorized_keys
+cat "$SSH_DIR/my-ec2-key.pub" >> "$SSH_DIR/authorized_keys"
+chmod 600 "$SSH_DIR/authorized_keys"
+
+# Ensure ownership is correct
+chown -R ubuntu:ubuntu "$SSH_DIR"
+✅
