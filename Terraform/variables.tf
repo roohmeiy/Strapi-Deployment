@@ -14,7 +14,7 @@ variable "aws_region" {
   default     = "us-east-1"  # Default can be overridden
 }
 
-variable "ecr_repository_name" {
-    description = "Name of ecr repo"
-    type = string  
-}
+# variable "ecr_repository_name" {
+#     description = "Name of ecr repo"
+#     type = string  
+# }

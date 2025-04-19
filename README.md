@@ -28,3 +28,4 @@
     cat ~/.ssh/my-ec2-key
     cat ~/.ssh/my-ec2-key.pub
     ```
+    
