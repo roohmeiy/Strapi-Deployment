@@ -29,30 +29,35 @@ jobs:
           password: ${{ secrets.DOCKER_HUB_TOKEN }}
 
       - name: Run commands on EC2 via SSH
+        env:
+          IMAGE_NAME: "my-strapi-app"
+          IMAGE_TAG: ${{ env.IMAGE_TAG }}
+          API_TOKEN_SALT: ${{ secrets.API_TOKEN_SALT }}
+          ADMIN_JWT_SECRET: ${{ secrets.ADMIN_JWT_SECRET }}
+          TRANSFER_TOKEN_SALT: ${{ secrets.TRANSFER_TOKEN_SALT }}
+          APP_KEYS: ${{ secrets.APP_KEYS }}
         run: |
-          IMAGE_NAME="my-strapi-app"
-          IMAGE_TAG="${{ env.IMAGE_TAG }}"
-          
-          ssh -o StrictHostKeyChecking=no ubuntu@${{ secrets.EC2_INSTANCE_PUBLIC_IP }} << EOF
-            # Export variables into the SSH session
-            export IMAGE_NAME="$IMAGE_NAME"
-            export IMAGE_TAG="$IMAGE_TAG"
+          ssh -o StrictHostKeyChecking=no ubuntu@${{ secrets.EC2_INSTANCE_PUBLIC_IP }} << 'ENDSSH'
+            # Define container name
             CONTAINER_NAME="my-strapi-app"
+            IMAGE_NAME="${{ env.IMAGE_NAME }}"
+            IMAGE_TAG="${{ env.IMAGE_TAG }}"
 
             # Stop and remove the existing container if it exists
-            if [ "\$(docker ps -q -f name=\$CONTAINER_NAME)" ]; then
+            if [ "$(docker ps -q -f name=$CONTAINER_NAME)" ]; then
               echo "Stopping and removing existing container..."
-              docker stop \$CONTAINER_NAME
-              docker rm \$CONTAINER_NAME
+              docker stop $CONTAINER_NAME
+              docker rm $CONTAINER_NAME
             fi
             
             # Pull and run the Docker container
-            docker pull roohmeiy/\$IMAGE_NAME:\$IMAGE_TAG
+            docker pull roohmeiy/$IMAGE_NAME:$IMAGE_TAG
+            
             docker run -d --name $CONTAINER_NAME \
               -p 1337:1337 \
-              -e API_TOKEN_SALT="${{ secrets.API_TOKEN_SALT }}" \
-              -e ADMIN_JWT_SECRET="${{ secrets.ADMIN_JWT_SECRET }}" \
-              -e TRANSFER_TOKEN_SALT="${{ secrets.TRANSFER_TOKEN_SALT }}" \
-              -e APP_KEYS="${{ secrets.APP_KEYS }}" \
-               roohmeiy/$IMAGE_NAME:$IMAGE_TAG   
-            EOF
+              -e API_TOKEN_SALT='${{ env.API_TOKEN_SALT }}' \
+              -e ADMIN_JWT_SECRET='${{ env.ADMIN_JWT_SECRET }}' \
+              -e TRANSFER_TOKEN_SALT='${{ env.TRANSFER_TOKEN_SALT }}' \
+              -e APP_KEYS='${{ env.APP_KEYS }}' \
+              roohmeiy/$IMAGE_NAME:$IMAGE_TAG
+          ENDSSH
