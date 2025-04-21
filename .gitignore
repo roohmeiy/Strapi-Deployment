@@ -39,8 +39,11 @@ tsconfig.tsbuildinfo
 # Terraform-related
 Terraform/.terraform/
 Terraform/.terraform.lock.hcl
+Terraform-ecs/.terraform/
+Terraform-ecs/.terraform.lock.hcl
 *.tfstate
 *.tfstate.*
+*.tfvars
 
 Terraform/payal-rsa.pub
 
