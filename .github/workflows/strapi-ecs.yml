@@ -3,6 +3,11 @@ name: Deploy Strapi to AWS ECS
 on:
   push:
     branches: [ main ]
+    paths-ignore:
+        - 'README.md'
+        - '.github/**'
+        - 'Terraform-ecs/**'
+        - 'Terraform/'
   workflow_dispatch:
 
 jobs:
