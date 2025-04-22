@@ -33,16 +33,16 @@ jobs:
       run: terraform init
 
     # Apply only the ECR module first to ensure the repository exists
-    - name: Terraform Apply ECR Module
-      working-directory: ./Terraform-ecs-cicd/ecr
-      run: terraform apply -auto-approve -var="ecr_repo_name=${{ secrets.ECR_REPOSITORY_NAME }}"
-        
     - name: Get ECR Repository URL
       id: ecr_output
       working-directory: ./Terraform-ecs-cicd/ecr
       run: |
-        REPO_URL=$(terraform output -raw repository_url)
-        echo "repository_url=${REPO_URL}" >> $GITHUB_OUTPUT
+        # Use data source to fetch existing repo rather than trying to create a new one
+        terraform apply -auto-approve -var="ecr_repo_name=${{ secrets.ECR_REPOSITORY_NAME }}" -var="create_repository=false"
+        # Get the repository URL from terraform output
+        REPO_URL=$(terraform output -raw repository_url || terraform output repository_url | tr -d '"')
+        echo "Retrieved repository URL: $REPO_URL"
+        echo "repository_url=$REPO_URL" >> $GITHUB_OUTPUT
 
   build_push:
     name: Build and Push Docker Image
