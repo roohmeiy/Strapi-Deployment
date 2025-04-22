@@ -1,24 +1,9 @@
 # Fetch available AZs
 data "aws_availability_zones" "available" {}
 
-# Check if ECR repository exists
-data "aws_ecr_repository" "existing_repo" {
-  count = var.create_ecr_repo ? 0 : 1
-  name  = var.ecr_repo_name
-}
-
-# Create ECR Repository if it doesn't exist
-resource "aws_ecr_repository" "strapi_repo" {
-  count = var.create_ecr_repo ? 1 : 0
-  name  = var.ecr_repo_name
-  
-  image_scanning_configuration {
-    scan_on_push = true
-  }
-  
-  tags = {
-    Name = "strapi-app-repository"
-  }
+# Reference the ECR repository created by the ECR module
+data "aws_ecr_repository" "strapi_repo" {
+  name = var.ecr_repo_name
 }
 
 # Create a VPC
@@ -134,7 +119,7 @@ resource "aws_ecs_task_definition" "strapi_task" {
 
   container_definitions = jsonencode([{
     name      = "strapi-app"
-    image     = "${var.create_ecr_repo ? aws_ecr_repository.strapi_repo[0].repository_url : data.aws_ecr_repository.existing_repo[0].repository_url}"
+    image     = "${data.aws_ecr_repository.strapi_repo.repository_url}:${var.image_tag}"
     cpu       = 256
     memory    = 512
     essential = true
@@ -163,7 +148,6 @@ resource "aws_ecs_task_definition" "strapi_task" {
     ]
   }])
 }
-
 
 # Load Balancer
 resource "aws_lb" "strapi_alb" {

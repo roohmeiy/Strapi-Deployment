@@ -63,11 +63,11 @@ variable "app_keys" {
   type        = string
 }
 
-variable "create_ecr_repo" {
-  description = "Whether to create a new ECR repository"
-  type        = bool
-  default     = true
-}
+# variable "create_ecr_repo" {
+#   description = "Whether to create a new ECR repository"
+#   type        = bool
+#   default     = true
+# }
 
 variable "ecr_repo_name" {
   description = "Name of the ECR repository"
