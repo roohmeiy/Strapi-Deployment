@@ -71,7 +71,7 @@ jobs:
     - name: Terraform Plan
       id: plan
       working-directory: ./Terraform-ecs-cicd
-      run: terraform plan -out=tfplan -var="create_ecr_repo=false"
+      run: terraform plan -out=tfplan 
       env:
         TF_VAR_ecr_repo_name: ${{ secrets.ECR_REPOSITORY_NAME }}
         TF_VAR_image_tag: ${{ github.sha }}
