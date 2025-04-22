@@ -72,7 +72,6 @@ variable "create_ecr_repo" {
 variable "ecr_repo_name" {
   description = "Name of the ECR repository"
   type        = string
-  default     = "strapi-app"
 }
 variable "image_tag" {
   description = "Tag of the Docker image to deploy"

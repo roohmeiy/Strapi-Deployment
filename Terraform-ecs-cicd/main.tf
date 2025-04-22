@@ -9,7 +9,8 @@ data "aws_ecr_repository" "existing_repo" {
 
 # Create ECR Repository if it doesn't exist
 resource "aws_ecr_repository" "strapi_repo" {
-  name = var.ecr_repo_name
+  count = var.create_ecr_repo ? 1 : 0
+  name  = var.ecr_repo_name
   
   image_scanning_configuration {
     scan_on_push = true
@@ -19,7 +20,6 @@ resource "aws_ecr_repository" "strapi_repo" {
     Name = "strapi-app-repository"
   }
 }
-
 
 # Create a VPC
 resource "aws_vpc" "strapi_vpc" {
@@ -134,7 +134,7 @@ resource "aws_ecs_task_definition" "strapi_task" {
 
   container_definitions = jsonencode([{
     name      = "strapi-app"
-    image     = "${aws_ecr_repository.strapi_repo.repository_url}:${var.image_tag}"
+    image     = "${var.create_ecr_repo ? aws_ecr_repository.strapi_repo[0].repository_url : data.aws_ecr_repository.existing_repo[0].repository_url}"
     cpu       = 256
     memory    = 512
     essential = true

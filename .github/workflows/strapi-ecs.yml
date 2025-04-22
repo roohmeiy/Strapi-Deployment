@@ -6,9 +6,12 @@ on:
   workflow_dispatch:
 
 jobs:
-  deploy:
-    name: Deploy
+  prepare:
+    name: Prepare Environment
     runs-on: ubuntu-latest
+    outputs:
+      ecr_repo_created: ${{ steps.create_ecr.outputs.created }}
+      image: ${{ steps.build_image.outputs.image }}
     
     steps:
     - name: Checkout code
@@ -21,12 +24,25 @@ jobs:
         aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
         aws-region: ${{ secrets.AWS_REGION }}
 
+    - name: Create ECR Repository if needed
+      id: create_ecr
+      run: |
+        # Check if ECR repository exists
+        if ! aws ecr describe-repositories --repository-names ${{ secrets.ECR_REPOSITORY_NAME }} 2>/dev/null; then
+          echo "Creating ECR repository ${{ secrets.ECR_REPOSITORY_NAME }}"
+          aws ecr create-repository --repository-name ${{ secrets.ECR_REPOSITORY_NAME }} --image-scanning-configuration scanOnPush=true
+          echo "created=true" >> $GITHUB_OUTPUT
+        else
+          echo "ECR repository ${{ secrets.ECR_REPOSITORY_NAME }} already exists"
+          echo "created=false" >> $GITHUB_OUTPUT
+        fi
+
     - name: Login to Amazon ECR
       id: login-ecr
       uses: aws-actions/amazon-ecr-login@v1
 
     - name: Build, tag, and push image to Amazon ECR
-      id: build-image
+      id: build_image
       env:
         ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
         ECR_REPOSITORY: ${{ secrets.ECR_REPOSITORY_NAME }}
@@ -40,6 +56,22 @@ jobs:
         docker push $ECR_REGISTRY/$ECR_REPOSITORY:latest
         echo "image=$ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG" >> $GITHUB_OUTPUT
 
+  deploy:
+    name: Deploy Infrastructure
+    needs: prepare
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v3
+
+    - name: Configure AWS credentials
+      uses: aws-actions/configure-aws-credentials@v1
+      with:
+        aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+        aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+        aws-region: ${{ secrets.AWS_REGION }}
+
     - name: Setup Terraform
       uses: hashicorp/setup-terraform@v2
       with:
@@ -50,14 +82,13 @@ jobs:
       working-directory: ./Terraform-ecs-cicd
       run: terraform init
       env:
-        TF_VAR_ecr_repo_name: ${{ secrets.ECR_REPOSITORY_NAME }}
         AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
         AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
 
     - name: Terraform Plan
       id: plan
       working-directory: ./Terraform-ecs-cicd
-      run: terraform plan -out=tfplan
+      run: terraform plan -out=tfplan -var="create_ecr_repo=false"
       env:
         TF_VAR_ecr_repo_name: ${{ secrets.ECR_REPOSITORY_NAME }}
         TF_VAR_image_tag: ${{ github.sha }}
@@ -95,8 +126,49 @@ jobs:
         TF_VAR_app_keys: ${{ secrets.APP_KEYS }}
       continue-on-error: true
 
-    - name: Terraform Destroy on Failure
+    - name: Check Apply Status
+      id: check_apply
       if: steps.apply.outcome == 'failure'
+      run: |
+        echo "::set-output name=status::failure"
+        exit 1
+      continue-on-error: true
+
+    - name: Force new deployment
+      if: steps.apply.outcome == 'success'
+      run: |
+        aws ecs update-service --cluster ${{ secrets.ECS_CLUSTER_NAME }} --service ${{ secrets.ECS_SERVICE_NAME }} --force-new-deployment
+
+  cleanup:
+    name: Cleanup on Failure
+    needs: [prepare, deploy]
+    runs-on: ubuntu-latest
+    if: failure()
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v3
+
+    - name: Configure AWS credentials
+      uses: aws-actions/configure-aws-credentials@v1
+      with:
+        aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+        aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+        aws-region: ${{ secrets.AWS_REGION }}
+
+    - name: Setup Terraform
+      uses: hashicorp/setup-terraform@v2
+      with:
+        terraform_version: 1.4.0
+
+    - name: Terraform Init
+      working-directory: ./Terraform-ecs-cicd
+      run: terraform init
+      env:
+        AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+        AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+
+    - name: Terraform Destroy
       working-directory: ./Terraform-ecs-cicd
       run: terraform destroy -auto-approve
       env:
@@ -114,12 +186,3 @@ jobs:
         TF_VAR_admin_jwt_secret: ${{ secrets.ADMIN_JWT_SECRET }}
         TF_VAR_transfer_token_salt: ${{ secrets.TRANSFER_TOKEN_SALT }}
         TF_VAR_app_keys: ${{ secrets.APP_KEYS }}
-
-    - name: Check Terraform Apply Status and Exit on Failure
-      if: steps.apply.outcome == 'failure'
-      run: exit 1
-
-    - name: Force new deployment
-      if: steps.apply.outcome == 'success'
-      run: |
-        aws ecs update-service --cluster ${{ secrets.ECS_CLUSTER_NAME }} --service ${{ secrets.ECS_SERVICE_NAME }} --force-new-deployment
