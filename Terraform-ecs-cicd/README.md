@@ -5,3 +5,4 @@ CI/CD pipeline is automated using GitHub Actions for seamless deployment.
 
 ![img4](img/img4.png "img4")
 ![img3](img/img3.png "img3")
+![img5](img/img5.jpeg "img5")
