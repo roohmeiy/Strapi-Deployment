@@ -41,6 +41,10 @@ Terraform/.terraform/
 Terraform/.terraform.lock.hcl
 Terraform-ecs/.terraform/
 Terraform-ecs/.terraform.lock.hcl
+Terraform-ecs-cicd/.terraform/
+Terraform-ecs-cicd/.terraform.lock.hcl
+Terraform-ecs-cloudwatch/.terraform/
+Terraform-ecs-cloudwatch/.terraform.lock.hcl
 *.tfstate
 *.tfstate.*
 *.tfvars
