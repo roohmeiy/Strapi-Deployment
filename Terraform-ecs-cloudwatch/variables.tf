@@ -125,3 +125,14 @@ variable "dashboard_name" {
   type        = string
   default     = "payal-strapi-monitoring-dashboard"
 }
+
+variable "alarm_email" {
+  description = "Email address to send alarm notifications to"
+  type        = string
+}
+
+variable "sns_topic_name" {
+  description = "Name of the SNS topic for alarm notifications"
+  type        = string
+  default     = "payal-strapi-alarm-notifications"
+}

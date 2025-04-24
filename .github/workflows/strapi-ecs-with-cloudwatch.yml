@@ -100,6 +100,7 @@ jobs:
         TF_VAR_transfer_token_salt: ${{ secrets.TRANSFER_TOKEN_SALT }}
         TF_VAR_app_keys: ${{ secrets.APP_KEYS }}
         TF_VAR_aws_region: ${{ secrets.AWS_REGION }}
+        TF_VAR_alarm_email: ${{ secrets.ALARM_EMAIL }}
         
     - name: Terraform Apply
       id: apply
@@ -130,6 +131,7 @@ jobs:
         TF_VAR_transfer_token_salt: ${{ secrets.TRANSFER_TOKEN_SALT }}
         TF_VAR_app_keys: ${{ secrets.APP_KEYS }}
         TF_VAR_aws_region: ${{ secrets.AWS_REGION }}
+        TF_VAR_alarm_email: ${{ secrets.ALARM_EMAIL }}
        
     - name: Force new deployment
       if: steps.apply.outputs.apply_status == 'success'
@@ -187,4 +189,4 @@ jobs:
         TF_VAR_transfer_token_salt: ${{ secrets.TRANSFER_TOKEN_SALT }}
         TF_VAR_app_keys: ${{ secrets.APP_KEYS }}
         TF_VAR_aws_region: ${{ secrets.AWS_REGION }}
-        
+        TF_VAR_alarm_email: ${{ secrets.ALARM_EMAIL }}

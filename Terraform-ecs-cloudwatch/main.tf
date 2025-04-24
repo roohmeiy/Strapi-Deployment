@@ -276,6 +276,19 @@ resource "aws_ecs_service" "strapi_service" {
   }
 }
 
+# Create an SNS topic for CloudWatch alarm notifications
+resource "aws_sns_topic" "alarm_notifications" {
+  name = var.sns_topic_name
+}
+
+# Create an SNS subscription for email notifications
+resource "aws_sns_topic_subscription" "alarm_email_subscription" {
+  topic_arn = aws_sns_topic.alarm_notifications.arn
+  protocol  = "email"
+  endpoint  = var.alarm_email
+}
+
+# CloudWatch CPU Utilization Alarm with Notifications
 resource "aws_cloudwatch_metric_alarm" "cpu_high" {
   alarm_name          = var.cpu_alarm_name
   comparison_operator = "GreaterThanThreshold"
@@ -286,6 +299,8 @@ resource "aws_cloudwatch_metric_alarm" "cpu_high" {
   statistic           = "Average"
   threshold           = "80"
   alarm_description   = "This metric monitors ecs cpu utilization"
+  alarm_actions       = [aws_sns_topic.alarm_notifications.arn]
+  ok_actions          = [aws_sns_topic.alarm_notifications.arn]
   
   dimensions = {
     ClusterName = aws_ecs_cluster.strapi_cluster.name
@@ -293,7 +308,7 @@ resource "aws_cloudwatch_metric_alarm" "cpu_high" {
   }
 }
 
-# CloudWatch Memory Utilization Alarm
+# CloudWatch Memory Utilization Alarm with Notifications
 resource "aws_cloudwatch_metric_alarm" "memory_high" {
   alarm_name          = var.memory_alarm_name
   comparison_operator = "GreaterThanThreshold"
@@ -304,6 +319,8 @@ resource "aws_cloudwatch_metric_alarm" "memory_high" {
   statistic           = "Average"
   threshold           = "80"
   alarm_description   = "This metric monitors ecs memory utilization"
+  alarm_actions       = [aws_sns_topic.alarm_notifications.arn]
+  ok_actions          = [aws_sns_topic.alarm_notifications.arn]
   
   dimensions = {
     ClusterName = aws_ecs_cluster.strapi_cluster.name
@@ -311,7 +328,7 @@ resource "aws_cloudwatch_metric_alarm" "memory_high" {
   }
 }
 
-# CloudWatch ALB Response Time Alarm
+# CloudWatch ALB Response Time Alarm with Notifications
 resource "aws_cloudwatch_metric_alarm" "alb_high_response_time" {
   alarm_name          = var.response_time_alarm_name
   comparison_operator = "GreaterThanThreshold"
@@ -322,14 +339,15 @@ resource "aws_cloudwatch_metric_alarm" "alb_high_response_time" {
   statistic           = "Average"
   threshold           = "10"  # 10 second response time threshold
   alarm_description   = "This metric monitors ALB target response time"
+  alarm_actions       = [aws_sns_topic.alarm_notifications.arn]
+  ok_actions          = [aws_sns_topic.alarm_notifications.arn]
   
   dimensions = {
     LoadBalancer = aws_lb.strapi_alb.arn_suffix
   }
 }
 
-
-# CloudWatch HTTP 5XX Error Alarm
+# CloudWatch HTTP 5XX Error Alarm with Notifications
 resource "aws_cloudwatch_metric_alarm" "alb_high_5xx" {
   alarm_name          = var.error_5xx_alarm_name
   comparison_operator = "GreaterThanThreshold"
@@ -340,12 +358,13 @@ resource "aws_cloudwatch_metric_alarm" "alb_high_5xx" {
   statistic           = "Sum"
   threshold           = "5"  # 5 errors per minute
   alarm_description   = "This metric monitors the number of 5XX errors"
+  alarm_actions       = [aws_sns_topic.alarm_notifications.arn]
+  ok_actions          = [aws_sns_topic.alarm_notifications.arn]
   
   dimensions = {
     LoadBalancer = aws_lb.strapi_alb.arn_suffix
   }
 }
-
 
 # CloudWatch Dashboard for Strapi
 resource "aws_cloudwatch_dashboard" "strapi_dashboard" {
