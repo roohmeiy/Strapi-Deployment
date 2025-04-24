@@ -7,6 +7,7 @@ Also implemented monitoring --> metrics and alarm using cloudwatch metrics
 ![img1](img/img1.png "img1")
 ![img2](img/img2.png "img2")
 ![img3](img/img3.png "img3")
+![img4](img/img4.png "img4")
 
 ### The Terraform code is in directory- Terraform-ecs-cloudwatch  and pipleine code is in .github/workflows/strapi-ecs-with-cloudwatch.yml
 
@@ -27,6 +28,7 @@ This project automates the deployment of a Strapi application using **AWS ECS Fa
   - High Memory (`>80%`)
   - High ALB response time (`>10s`)
   - 5XX error spike on ALB (`>5` in 1 min)
+- Email notifications for alarms via SNS
 - CloudWatch Dashboard with metrics and logs
 
 ---
@@ -39,9 +41,8 @@ This project automates the deployment of a Strapi application using **AWS ECS Fa
 - **IAM Roles**: For ECS task execution and CloudWatch logging
 - **CloudWatch Logs**: Logs sent from ECS containers
 - **CloudWatch Alarms**: Notifies abnormal behavior
+- **SNS Topic & Subscription**: Routes alarm notifications to email
 - **Dashboard**: Visualize performance metrics and logs
-
-
 
 ## 📊 Monitoring
 
@@ -50,5 +51,11 @@ Accessible in CloudWatch:
 - ALB request count & response time
 - Recent logs from `/ecs/strapi`
 
+## 🔔 Notifications
 
-This deployment configuration provides a reliable, immutable, and traceable way to deploy Strapi applications to AWS ECS fargate using GitHub Actions and Terraform. By using commit SHAs as image tags, each deployment is uniquely identifiable and can be traced back to a specific code version.
+The deployment includes an SNS topic for CloudWatch alarm notifications:
+- Configurable email destination through environment variables
+- Notifications sent for both alarm and recovery events
+- Supported alarms include CPU, memory, response time, and 5XX errors
+- First-time deployment requires confirmation of the SNS subscription via email
+
