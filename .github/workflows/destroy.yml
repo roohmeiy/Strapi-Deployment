@@ -30,7 +30,27 @@ jobs:
         env:
             AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
             AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-            
+
       - name: Terraform Destroy
         working-directory: ./Terraform-ecs-cicd
-        run: terraform destroy -auto-approve
+        run: |
+              echo "Starting cleanup of resources..."
+              terraform destroy -auto-approve
+              echo "Cleanup completed"
+        env:
+              TF_VAR_ecr_repo_name: ${{ secrets.ECR_REPOSITORY_NAME }}
+              TF_VAR_image_tag: ${{ github.sha }}
+              TF_VAR_vpc_name: ${{ secrets.VPC_NAME }}
+              TF_VAR_igw_name: ${{ secrets.IGW_NAME }}
+              TF_VAR_security_group_name: ${{ secrets.SECURITY_GROUP_NAME }}
+              TF_VAR_ecs_cluster_name: ${{ secrets.ECS_CLUSTER_NAME }}
+              TF_VAR_task_definition_name: ${{ secrets.TASK_DEFINITION_NAME }}
+              TF_VAR_ecs_service_name: ${{ secrets.ECS_SERVICE_NAME }}
+              TF_VAR_alb_name: ${{ secrets.ALB_NAME }}
+              TF_VAR_target_group_name: ${{ secrets.TARGET_GROUP_NAME }}
+              TF_VAR_api_token_salt: ${{ secrets.API_TOKEN_SALT }}
+              TF_VAR_admin_jwt_secret: ${{ secrets.ADMIN_JWT_SECRET }}
+              TF_VAR_transfer_token_salt: ${{ secrets.TRANSFER_TOKEN_SALT }}
+              TF_VAR_app_keys: ${{ secrets.APP_KEYS }}
+              TF_VAR_aws_region: ${{ secrets.AWS_REGION }}
+          

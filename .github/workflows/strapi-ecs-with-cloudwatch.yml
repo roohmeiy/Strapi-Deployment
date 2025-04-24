@@ -1,16 +1,18 @@
-name: Deploy Strapi to AWS ECS with CloudWatch Monitoring
+name: Deploy Strapi to AWS ECS
 
 on:
   push:
     branches: [ main ]
     paths-ignore:
         - 'README.md'
-        - '.github/workflows/cd.yml'
-        - '.github/workflows/ci.yml'
-        - '.github/workflows/strapi-ecs.yml'
         - '.github/latest-image-tag.txt'
+        - '.github/workflows/ci.yml'
+        - '.github/workflows/cd.yml'
+        - '.github/workflows/destroy.yml'
+        - '.github/workflows/strapi-ecs.yml'
         - 'Terraform-ecs/**'
         - 'Terraform/'
+
   workflow_dispatch:
 
 jobs:
@@ -51,6 +53,8 @@ jobs:
     name: Deploy Infrastructure
     needs: prepare
     runs-on: ubuntu-latest
+    outputs:
+      apply_status: ${{ steps.apply.outcome }}
     
     steps:
     - name: Checkout code
@@ -96,11 +100,20 @@ jobs:
         TF_VAR_transfer_token_salt: ${{ secrets.TRANSFER_TOKEN_SALT }}
         TF_VAR_app_keys: ${{ secrets.APP_KEYS }}
         TF_VAR_aws_region: ${{ secrets.AWS_REGION }}
-
+        
     - name: Terraform Apply
       id: apply
       working-directory: ./Terraform-ecs-cicd
-      run: terraform apply -auto-approve tfplan
+      run: |
+        set -e
+        if terraform apply -auto-approve tfplan; then
+          echo "Terraform apply succeeded"
+          echo "apply_status=success" >> $GITHUB_OUTPUT
+        else
+          echo "Terraform apply failed"
+          echo "apply_status=failure" >> $GITHUB_OUTPUT
+          exit 1
+        fi
       env:
         TF_VAR_ecr_repo_name: ${{ secrets.ECR_REPOSITORY_NAME }}
         TF_VAR_image_tag: ${{ github.sha }}
@@ -117,34 +130,17 @@ jobs:
         TF_VAR_transfer_token_salt: ${{ secrets.TRANSFER_TOKEN_SALT }}
         TF_VAR_app_keys: ${{ secrets.APP_KEYS }}
         TF_VAR_aws_region: ${{ secrets.AWS_REGION }}
-      continue-on-error: true
-
-    - name: Check Apply Status
-      id: check_apply
-      if: steps.apply.outcome == 'failure'
-      run: |
-        echo "status=failure" >> $GITHUB_OUTPUT
-        exit 1
-      continue-on-error: true
-
+       
     - name: Force new deployment
-      if: steps.apply.outcome == 'success'
+      if: steps.apply.outputs.apply_status == 'success'
       run: |
         aws ecs update-service --cluster ${{ secrets.ECS_CLUSTER_NAME }} --service ${{ secrets.ECS_SERVICE_NAME }} --force-new-deployment
-
-    - name: Verify CloudWatch Log Group
-      if: steps.apply.outcome == 'success'
-      run: |
-        # Check if CloudWatch logs are being generated
-        LOG_STREAMS=$(aws logs describe-log-streams --log-group-name "/ecs/strapi" --limit 5)
-        echo "CloudWatch Log Streams: $LOG_STREAMS"
-        echo "CloudWatch Monitoring setup complete. Check the AWS Console for the dashboard: strapi-monitoring-dashboard"
 
   cleanup:
     name: Cleanup on Failure
     needs: [prepare, deploy]
     runs-on: ubuntu-latest
-    if: failure()
+    if: needs.deploy.outputs.apply_status == 'failure' || failure()
     
     steps:
     - name: Checkout code
@@ -171,7 +167,10 @@ jobs:
 
     - name: Terraform Destroy
       working-directory: ./Terraform-ecs-cicd
-      run: terraform destroy -auto-approve
+      run: |
+        echo "Starting cleanup of resources..."
+        terraform destroy -auto-approve
+        echo "Cleanup completed"
       env:
         TF_VAR_ecr_repo_name: ${{ secrets.ECR_REPOSITORY_NAME }}
         TF_VAR_image_tag: ${{ github.sha }}
@@ -188,3 +187,4 @@ jobs:
         TF_VAR_transfer_token_salt: ${{ secrets.TRANSFER_TOKEN_SALT }}
         TF_VAR_app_keys: ${{ secrets.APP_KEYS }}
         TF_VAR_aws_region: ${{ secrets.AWS_REGION }}
+        
