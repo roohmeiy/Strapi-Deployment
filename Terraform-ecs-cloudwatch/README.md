@@ -6,7 +6,7 @@ Also implemented monitoring --> metrics and alarm using cloudwatch metrics
 
 ![img1](img/img1.png "img1")
 ![img2](img/img2.png "img2")
-![img3](img/img3.jpeg "img3")
+![img3](img/img3.png "img3")
 
 ### The Terraform code is in directory- Terraform-ecs-cloudwatch  and pipleine code is in .github/workflows/strapi-ecs-yaml
 
@@ -50,6 +50,5 @@ Accessible in CloudWatch:
 - ALB request count & response time
 - Recent logs from `/ecs/strapi`
 
-## Conclusion
 
 This deployment configuration provides a reliable, immutable, and traceable way to deploy Strapi applications to AWS ECS fargate using GitHub Actions and Terraform. By using commit SHAs as image tags, each deployment is uniquely identifiable and can be traced back to a specific code version.
