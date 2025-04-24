@@ -8,7 +8,7 @@ Also implemented monitoring --> metrics and alarm using cloudwatch metrics
 ![img2](img/img2.png "img2")
 ![img3](img/img3.png "img3")
 
-### The Terraform code is in directory- Terraform-ecs-cloudwatch  and pipleine code is in .github/workflows/strapi-ecs-yaml
+### The Terraform code is in directory- Terraform-ecs-cloudwatch  and pipleine code is in .github/workflows/strapi-ecs-with-cloudwatch.yml
 
 # 🚀 Strapi on AWS ECS (Fargate) with Terraform
 
