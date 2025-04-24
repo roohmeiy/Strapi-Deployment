@@ -77,3 +77,51 @@ variable "image_tag" {
   description = "Tag of the Docker image to deploy"
   type        = string
 }
+
+variable "cloudwatch_log_group_name" {
+  description = "Name for CloudWatch log group"
+  type        = string
+  default     = "/ecs/strapi"
+}
+
+variable "ecs_task_execution_role_name" {
+  description = "Name for ECS task execution IAM role"
+  type        = string
+  default     = "payalStrapiEcsTaskExecutionRole"
+}
+
+variable "cloudwatch_policy_name" {
+  description = "Name for CloudWatch IAM policy"
+  type        = string
+  default     = "payal-strapi-cloudwatch-policy"
+}
+
+variable "cpu_alarm_name" {
+  description = "Name for CPU utilization alarm"
+  type        = string
+  default     = "payal-strapi-cpu-utilization-high"
+}
+
+variable "memory_alarm_name" {
+  description = "Name for memory utilization alarm"
+  type        = string
+  default     = "payal-strapi-memory-utilization-high"
+}
+
+variable "response_time_alarm_name" {
+  description = "Name for ALB response time alarm"
+  type        = string
+  default     = "payal-strapi-alb-high-response-time"
+}
+
+variable "error_5xx_alarm_name" {
+  description = "Name for ALB 5XX error alarm"
+  type        = string
+  default     = "payal-strapi-alb-high-5xx-error"
+}
+
+variable "dashboard_name" {
+  description = "Name for CloudWatch dashboard"
+  type        = string
+  default     = "payal-strapi-monitoring-dashboard"
+}

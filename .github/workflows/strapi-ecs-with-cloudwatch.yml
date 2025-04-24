@@ -1,0 +1,190 @@
+name: Deploy Strapi to AWS ECS with CloudWatch Monitoring
+
+on:
+  push:
+    branches: [ main ]
+    paths-ignore:
+        - 'README.md'
+        - '.github/workflows/cd.yml'
+        - '.github/workflows/ci.yml'
+        - '.github/workflows/strapi-ecs.yml'
+        - '.github/latest-image-tag.txt'
+        - 'Terraform-ecs/**'
+        - 'Terraform/'
+  workflow_dispatch:
+
+jobs:
+  prepare:
+    name: Prepare Environment
+    runs-on: ubuntu-latest
+    outputs:
+      image: ${{ steps.build_image.outputs.image }}
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v3
+
+    - name: Configure AWS credentials
+      uses: aws-actions/configure-aws-credentials@v1
+      with:
+        aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+        aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+        aws-region: ${{ secrets.AWS_REGION }}
+
+    - name: Login to Amazon ECR
+      id: login-ecr
+      uses: aws-actions/amazon-ecr-login@v1
+
+    - name: Build, tag, and push image to Amazon ECR
+      id: build_image
+      env:
+        ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+        ECR_REPOSITORY: ${{ secrets.ECR_REPOSITORY_NAME }}
+        IMAGE_TAG: ${{ github.sha }}
+      run: |
+        # Build a docker container and push it to ECR with SHA tag only
+        docker build -t $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG .
+        docker push $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG
+        echo "image=$ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG" >> $GITHUB_OUTPUT
+
+  deploy:
+    name: Deploy Infrastructure
+    needs: prepare
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v3
+
+    - name: Configure AWS credentials
+      uses: aws-actions/configure-aws-credentials@v1
+      with:
+        aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+        aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+        aws-region: ${{ secrets.AWS_REGION }}
+
+    - name: Setup Terraform
+      uses: hashicorp/setup-terraform@v2
+      with:
+        terraform_version: 1.11.3
+
+    - name: Terraform Init
+      id: init
+      working-directory: ./Terraform-ecs-cicd
+      run: terraform init
+      env:
+        AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+        AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+
+    - name: Terraform Plan
+      id: plan
+      working-directory: ./Terraform-ecs-cicd
+      run: terraform plan -out=tfplan 
+      env:
+        TF_VAR_ecr_repo_name: ${{ secrets.ECR_REPOSITORY_NAME }}
+        TF_VAR_image_tag: ${{ github.sha }}
+        TF_VAR_vpc_name: ${{ secrets.VPC_NAME }}
+        TF_VAR_igw_name: ${{ secrets.IGW_NAME }}
+        TF_VAR_security_group_name: ${{ secrets.SECURITY_GROUP_NAME }}
+        TF_VAR_ecs_cluster_name: ${{ secrets.ECS_CLUSTER_NAME }}
+        TF_VAR_task_definition_name: ${{ secrets.TASK_DEFINITION_NAME }}
+        TF_VAR_ecs_service_name: ${{ secrets.ECS_SERVICE_NAME }}
+        TF_VAR_alb_name: ${{ secrets.ALB_NAME }}
+        TF_VAR_target_group_name: ${{ secrets.TARGET_GROUP_NAME }}
+        TF_VAR_api_token_salt: ${{ secrets.API_TOKEN_SALT }}
+        TF_VAR_admin_jwt_secret: ${{ secrets.ADMIN_JWT_SECRET }}
+        TF_VAR_transfer_token_salt: ${{ secrets.TRANSFER_TOKEN_SALT }}
+        TF_VAR_app_keys: ${{ secrets.APP_KEYS }}
+        TF_VAR_aws_region: ${{ secrets.AWS_REGION }}
+
+    - name: Terraform Apply
+      id: apply
+      working-directory: ./Terraform-ecs-cicd
+      run: terraform apply -auto-approve tfplan
+      env:
+        TF_VAR_ecr_repo_name: ${{ secrets.ECR_REPOSITORY_NAME }}
+        TF_VAR_image_tag: ${{ github.sha }}
+        TF_VAR_vpc_name: ${{ secrets.VPC_NAME }}
+        TF_VAR_igw_name: ${{ secrets.IGW_NAME }}
+        TF_VAR_security_group_name: ${{ secrets.SECURITY_GROUP_NAME }}
+        TF_VAR_ecs_cluster_name: ${{ secrets.ECS_CLUSTER_NAME }}
+        TF_VAR_task_definition_name: ${{ secrets.TASK_DEFINITION_NAME }}
+        TF_VAR_ecs_service_name: ${{ secrets.ECS_SERVICE_NAME }}
+        TF_VAR_alb_name: ${{ secrets.ALB_NAME }}
+        TF_VAR_target_group_name: ${{ secrets.TARGET_GROUP_NAME }}
+        TF_VAR_api_token_salt: ${{ secrets.API_TOKEN_SALT }}
+        TF_VAR_admin_jwt_secret: ${{ secrets.ADMIN_JWT_SECRET }}
+        TF_VAR_transfer_token_salt: ${{ secrets.TRANSFER_TOKEN_SALT }}
+        TF_VAR_app_keys: ${{ secrets.APP_KEYS }}
+        TF_VAR_aws_region: ${{ secrets.AWS_REGION }}
+      continue-on-error: true
+
+    - name: Check Apply Status
+      id: check_apply
+      if: steps.apply.outcome == 'failure'
+      run: |
+        echo "status=failure" >> $GITHUB_OUTPUT
+        exit 1
+      continue-on-error: true
+
+    - name: Force new deployment
+      if: steps.apply.outcome == 'success'
+      run: |
+        aws ecs update-service --cluster ${{ secrets.ECS_CLUSTER_NAME }} --service ${{ secrets.ECS_SERVICE_NAME }} --force-new-deployment
+
+    - name: Verify CloudWatch Log Group
+      if: steps.apply.outcome == 'success'
+      run: |
+        # Check if CloudWatch logs are being generated
+        LOG_STREAMS=$(aws logs describe-log-streams --log-group-name "/ecs/strapi" --limit 5)
+        echo "CloudWatch Log Streams: $LOG_STREAMS"
+        echo "CloudWatch Monitoring setup complete. Check the AWS Console for the dashboard: strapi-monitoring-dashboard"
+
+  cleanup:
+    name: Cleanup on Failure
+    needs: [prepare, deploy]
+    runs-on: ubuntu-latest
+    if: failure()
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v3
+
+    - name: Configure AWS credentials
+      uses: aws-actions/configure-aws-credentials@v1
+      with:
+        aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+        aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+        aws-region: ${{ secrets.AWS_REGION }}
+
+    - name: Setup Terraform
+      uses: hashicorp/setup-terraform@v2
+      with:
+        terraform_version: 1.4.0
+
+    - name: Terraform Init
+      working-directory: ./Terraform-ecs-cicd
+      run: terraform init
+      env:
+        AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+        AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+
+    - name: Terraform Destroy
+      working-directory: ./Terraform-ecs-cicd
+      run: terraform destroy -auto-approve
+      env:
+        TF_VAR_ecr_repo_name: ${{ secrets.ECR_REPOSITORY_NAME }}
+        TF_VAR_image_tag: ${{ github.sha }}
+        TF_VAR_vpc_name: ${{ secrets.VPC_NAME }}
+        TF_VAR_igw_name: ${{ secrets.IGW_NAME }}
+        TF_VAR_security_group_name: ${{ secrets.SECURITY_GROUP_NAME }}
+        TF_VAR_ecs_cluster_name: ${{ secrets.ECS_CLUSTER_NAME }}
+        TF_VAR_task_definition_name: ${{ secrets.TASK_DEFINITION_NAME }}
+        TF_VAR_ecs_service_name: ${{ secrets.ECS_SERVICE_NAME }}
+        TF_VAR_alb_name: ${{ secrets.ALB_NAME }}
+        TF_VAR_target_group_name: ${{ secrets.TARGET_GROUP_NAME }}
+        TF_VAR_api_token_salt: ${{ secrets.API_TOKEN_SALT }}
+        TF_VAR_admin_jwt_secret: ${{ secrets.ADMIN_JWT_SECRET }}
+        TF_VAR_transfer_token_salt: ${{ secrets.TRANSFER_TOKEN_SALT }}
+        TF_VAR_app_keys: ${{ secrets.APP_KEYS }}
+        TF_VAR_aws_region: ${{ secrets.AWS_REGION }}

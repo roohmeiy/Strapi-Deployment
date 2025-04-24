@@ -3,7 +3,7 @@ provider "aws" {
 }
 
 resource "aws_s3_bucket" "terraform_state" {
-  bucket = "payal-strapi--bucket"
+  bucket = "payal-strapi-bucket"
 
   lifecycle {
     prevent_destroy = true

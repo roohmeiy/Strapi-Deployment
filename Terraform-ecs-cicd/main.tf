@@ -50,9 +50,21 @@ resource "aws_route_table_association" "strapi_association" {
   route_table_id = aws_route_table.strapi_route_table.id
 }
 
+#cloudwatch log group
+resource "aws_cloudwatch_log_group" "strapi_logs" {
+  name              = "/ecs/strapi"
+  retention_in_days = 30
+
+  tags = {
+    Name        = var.cloudwatch_log_group_name
+    Environment = "development"
+  }
+}
+
+
 # IAM Role for ECS Task Execution
 resource "aws_iam_role" "ecs_task_execution_role" {
-  name = "ecsTaskExecutionRole"
+  name = var.ecs_task_execution_role_name
   assume_role_policy = jsonencode({
     Version = "2012-10-17",
     Statement = [{
@@ -68,6 +80,39 @@ resource "aws_iam_role" "ecs_task_execution_role" {
 resource "aws_iam_role_policy_attachment" "ecs_task_execution_role_policy" {
   role       = aws_iam_role.ecs_task_execution_role.name
   policy_arn = "arn:aws:iam::aws:policy/service-role/AmazonECSTaskExecutionRolePolicy"
+}
+
+# CloudWatch IAM Policy
+resource "aws_iam_policy" "cloudwatch_policy" {
+  name        = var.cloudwatch_policy_name
+  description = "Allow Strapi ECS tasks to send logs and metrics to CloudWatch"
+
+  policy = jsonencode({
+    Version = "2012-10-17",
+    Statement = [
+      {
+        Action = [
+          "logs:CreateLogStream",
+          "logs:PutLogEvents",
+          "logs:CreateLogGroup"
+        ],
+        Effect   = "Allow",
+        Resource = "*"
+      },
+      {
+        Action = [
+          "cloudwatch:PutMetricData"
+        ],
+        Effect   = "Allow",
+        Resource = "*"
+      }
+    ]
+  })
+}
+
+resource "aws_iam_role_policy_attachment" "cloudwatch_policy_attachment" {
+  role       = aws_iam_role.ecs_task_execution_role.name
+  policy_arn = aws_iam_policy.cloudwatch_policy.arn
 }
 
 # Security Group
@@ -108,7 +153,7 @@ resource "aws_ecs_cluster" "strapi_cluster" {
   name = var.ecs_cluster_name
 }
 
-# ECS Task Definition
+# ECS Task Definition with CloudWatch Logs configuration
 resource "aws_ecs_task_definition" "strapi_task" {
   family                   = var.task_definition_name
   requires_compatibilities = ["FARGATE"]
@@ -145,7 +190,15 @@ resource "aws_ecs_task_definition" "strapi_task" {
         name  = "APP_KEYS"
         value = var.app_keys
       }
-    ]
+    ],
+    logConfiguration = {
+      logDriver = "awslogs"
+      options = {
+        "awslogs-group"         = aws_cloudwatch_log_group.strapi_logs.name
+        "awslogs-region"        = var.aws_region
+        "awslogs-stream-prefix" = "ecs/strapi"
+      }
+    }
   }])
 }
 
@@ -221,4 +274,162 @@ resource "aws_ecs_service" "strapi_service" {
   lifecycle {
     create_before_destroy = true
   }
+}
+
+resource "aws_cloudwatch_metric_alarm" "cpu_high" {
+  alarm_name          = var.cpu_alarm_name
+  comparison_operator = "GreaterThanThreshold"
+  evaluation_periods  = "2"
+  metric_name         = "CPUUtilization"
+  namespace           = "AWS/ECS"
+  period              = "60"
+  statistic           = "Average"
+  threshold           = "80"
+  alarm_description   = "This metric monitors ecs cpu utilization"
+  
+  dimensions = {
+    ClusterName = aws_ecs_cluster.strapi_cluster.name
+    ServiceName = aws_ecs_service.strapi_service.name
+  }
+}
+
+# CloudWatch Memory Utilization Alarm
+resource "aws_cloudwatch_metric_alarm" "memory_high" {
+  alarm_name          = var.memory_alarm_name
+  comparison_operator = "GreaterThanThreshold"
+  evaluation_periods  = "2"
+  metric_name         = "MemoryUtilization"
+  namespace           = "AWS/ECS"
+  period              = "60"
+  statistic           = "Average"
+  threshold           = "80"
+  alarm_description   = "This metric monitors ecs memory utilization"
+  
+  dimensions = {
+    ClusterName = aws_ecs_cluster.strapi_cluster.name
+    ServiceName = aws_ecs_service.strapi_service.name
+  }
+}
+
+# CloudWatch ALB Response Time Alarm
+resource "aws_cloudwatch_metric_alarm" "alb_high_response_time" {
+  alarm_name          = var.response_time_alarm_name
+  comparison_operator = "GreaterThanThreshold"
+  evaluation_periods  = "3"
+  metric_name         = "TargetResponseTime"
+  namespace           = "AWS/ApplicationELB"
+  period              = "60"
+  statistic           = "Average"
+  threshold           = "1"  # 1 second response time threshold
+  alarm_description   = "This metric monitors ALB target response time"
+  
+  dimensions = {
+    LoadBalancer = aws_lb.strapi_alb.arn_suffix
+  }
+}
+
+
+# CloudWatch HTTP 5XX Error Alarm
+resource "aws_cloudwatch_metric_alarm" "alb_high_5xx" {
+  alarm_name          = var.error_5xx_alarm_name
+  comparison_operator = "GreaterThanThreshold"
+  evaluation_periods  = "1"
+  metric_name         = "HTTPCode_Target_5XX_Count"
+  namespace           = "AWS/ApplicationELB"
+  period              = "60"
+  statistic           = "Sum"
+  threshold           = "5"  # 5 errors per minute
+  alarm_description   = "This metric monitors the number of 5XX errors"
+  
+  dimensions = {
+    LoadBalancer = aws_lb.strapi_alb.arn_suffix
+  }
+}
+
+
+# CloudWatch Dashboard for Strapi
+resource "aws_cloudwatch_dashboard" "strapi_dashboard" {
+  dashboard_name = var.dashboard_name
+
+  dashboard_body = jsonencode({
+    widgets = [
+      {
+        type   = "metric"
+        x      = 0
+        y      = 0
+        width  = 12
+        height = 6
+        properties = {
+          metrics = [
+            ["AWS/ECS", "CPUUtilization", "ClusterName", aws_ecs_cluster.strapi_cluster.name, "ServiceName", aws_ecs_service.strapi_service.name]
+          ]
+          period = 300
+          stat   = "Average"
+          region = var.aws_region
+          title  = "CPU Utilization"
+        }
+      },
+      {
+        type   = "metric"
+        x      = 12
+        y      = 0
+        width  = 12
+        height = 6
+        properties = {
+          metrics = [
+            ["AWS/ECS", "MemoryUtilization", "ClusterName", aws_ecs_cluster.strapi_cluster.name, "ServiceName", aws_ecs_service.strapi_service.name]
+          ]
+          period = 300
+          stat   = "Average"
+          region = var.aws_region
+          title  = "Memory Utilization"
+        }
+      },
+      {
+        type   = "metric"
+        x      = 0
+        y      = 6
+        width  = 12
+        height = 6
+        properties = {
+          metrics = [
+            ["AWS/ApplicationELB", "RequestCount", "LoadBalancer", aws_lb.strapi_alb.arn_suffix]
+          ]
+          period = 300
+          stat   = "Sum"
+          region = var.aws_region
+          title  = "Request Count"
+        }
+      },
+      {
+        type   = "metric"
+        x      = 12
+        y      = 6
+        width  = 12
+        height = 6
+        properties = {
+          metrics = [
+            ["AWS/ApplicationELB", "TargetResponseTime", "LoadBalancer", aws_lb.strapi_alb.arn_suffix]
+          ]
+          period = 300
+          stat   = "Average"
+          region = var.aws_region
+          title  = "Response Time"
+        }
+      },
+      {
+        type   = "log"
+        x      = 0
+        y      = 12
+        width  = 24
+        height = 6
+        properties = {
+          query   = "SOURCE '${aws_cloudwatch_log_group.strapi_logs.name}' | fields @timestamp, @message | sort @timestamp desc | limit 20"
+          region  = var.aws_region
+          title   = "Strapi Application Logs"
+          view    = "table"
+        }
+      }
+    ]
+  })
 }
