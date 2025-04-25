@@ -10,8 +10,6 @@ on:
         - '.github/workflows/cd.yml'
         - '.github/workflows/destroy.yml'
         - '.github/workflows/strapi-ecs.yml'
-        - 'Terraform-ecs/**'
-        - 'Terraform/'
 
   workflow_dispatch:
 

@@ -6,8 +6,6 @@ on:
     paths-ignore:
         - 'README.md'
         - '.github/**'
-        - 'Terraform-ecs/**'
-        - 'Terraform/'
   workflow_dispatch:
 
 jobs:
