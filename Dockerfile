@@ -1,27 +1,25 @@
-# Creating multi-stage build 
-FROM node:18-alpine AS build
-RUN apk update && apk add --no-cache build-base gcc autoconf automake zlib-dev libpng-dev vips-dev git > /dev/null 2>&1
+#Dockerfile for npm
+
+FROM node:18-alpine3.18 AS build
+# Installing libvips-dev for sharp Compatibility
+RUN apk update && apk add --no-cache build-base gcc autoconf automake zlib-dev libpng-dev nasm bash vips-dev git
 ARG NODE_ENV=development
 ENV NODE_ENV=${NODE_ENV}
-# Add max old space size to prevent memory issues
 ENV NODE_OPTIONS="--max-old-space-size=4096"
-
 
 WORKDIR /opt/
 COPY package.json package-lock.json ./
-RUN yarn global add node-gyp
-RUN yarn config set network-timeout 600000 -g && yarn install
+RUN npm install -g node-gyp
+RUN npm config set fetch-retry-maxtimeout 600000 -g && npm install
 ENV PATH=/opt/node_modules/.bin:$PATH
+
 WORKDIR /opt/app
 COPY . .
-RUN yarn build
+RUN npm run build
 
-
-
-# Creating final image
-FROM node:18-alpine
+FROM node:18-alpine3.18
 RUN apk add --no-cache vips-dev
-ENV NODE_ENV=development
+ARG NODE_ENV=development
 ENV NODE_ENV=${NODE_ENV}
 WORKDIR /opt/
 COPY --from=build /opt/node_modules ./node_modules
@@ -32,4 +30,4 @@ ENV PATH=/opt/node_modules/.bin:$PATH
 RUN chown -R node:node /opt/app
 USER node
 EXPOSE 1337
-CMD ["yarn", "start"]
+CMD ["npm", "run", "develop"]
