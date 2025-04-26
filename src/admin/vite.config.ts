@@ -11,6 +11,7 @@
 //   });
 // };
 
+
 import { mergeConfig, type UserConfig } from 'vite';
 
 export default (config: UserConfig) => {
@@ -22,9 +23,11 @@ export default (config: UserConfig) => {
       },
     },
     server: {
-      host: true, // Listen on all addresses, including LAN and public addresses
-      // If you want to specify exact allowed hosts:
-      // host: ['localhost', 'your-domain.com', '192.168.1.100'], 
+      host: true, // Listen on all addresses
+      allowedHosts: [
+        'payal-strapi-alb-752517920.us-east-1.elb.amazonaws.com',
+        // You can add more allowed hosts if needed
+      ],
     },
   });
 };
