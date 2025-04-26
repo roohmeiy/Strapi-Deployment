@@ -121,8 +121,8 @@ resource "aws_ecs_task_definition" "strapi_task" {
   container_definitions = jsonencode([{
     name      = "strapi-app"
     image     = "${data.aws_ecr_repository.strapi_repo.repository_url}:${var.image_tag}"
-    cpu       = 256
-    memory    = 512
+    cpu       = 1024
+    memory    = 2048
     essential = true
     portMappings = [{
       containerPort = 1337
