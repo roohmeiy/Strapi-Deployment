@@ -31,3 +31,59 @@ RUN chown -R node:node /opt/app
 USER node
 EXPOSE 1337
 CMD ["npm", "run", "develop"]
+
+
+# # Build stage
+# FROM node:18-alpine AS build
+# WORKDIR /opt
+
+# # Install only the dependencies needed for building
+# RUN apk update && apk add --no-cache build-base gcc autoconf automake zlib-dev libpng-dev vips-dev git > /dev/null 2>&1
+# ENV NODE_OPTIONS="--max-old-space-size=4096"
+
+# # Copy only package files first to leverage Docker cache
+# COPY package.json package-lock.json ./
+# RUN npm ci
+
+# # Setup the app directory
+# WORKDIR /opt/app
+
+# # Copy project files
+# COPY config ./config
+# COPY database ./database
+# COPY public ./public
+# COPY src ./src
+# COPY favicon.png ./favicon.png
+# COPY tsconfig.json ./tsconfig.json
+# COPY types ./types
+
+# # Build the application
+# RUN npm run build
+
+# # Production stage
+# FROM node:18-alpine AS production
+# WORKDIR /opt
+# ENV NODE_ENV=development
+
+# # Install only production runtime dependencies
+# RUN apk add --no-cache vips-dev
+
+# # Copy only necessary files from build stage
+# COPY --from=build /opt/package.json /opt/package-lock.json ./
+# RUN npm ci --only=development
+
+# # Create app directory
+# WORKDIR /opt/app
+
+# # Copy only what's needed from the build stage
+# COPY --from=build /opt/app/build ./build
+# COPY --from=build /opt/app/config ./config
+# COPY --from=build /opt/app/database ./database
+# COPY --from=build /opt/app/public ./public
+# COPY --from=build /opt/app/favicon.png ./favicon.png
+
+# # Set proper permissions and user
+# RUN chown -R node:node /opt/app
+# USER node
+# EXPOSE 1337
+# CMD ["npm", "run", "start"]

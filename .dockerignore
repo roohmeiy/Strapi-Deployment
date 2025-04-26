@@ -4,4 +4,9 @@ Dockerfile
 .dockerignore
 .git
 .github
-
+.cache
+.tmp
+Terraform*
+backend-s3
+README.md
+DockerfileForYarn

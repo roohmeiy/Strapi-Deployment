@@ -14,6 +14,7 @@ resource "aws_vpc" "strapi_vpc" {
   }
 }
 
+
 # Create public subnets in 2 AZs
 resource "aws_subnet" "strapi_public_subnet" {
   count                   = 2
