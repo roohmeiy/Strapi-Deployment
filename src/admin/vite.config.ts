@@ -25,7 +25,7 @@ export default (config: UserConfig) => {
     server: {
       host: true, // Listen on all addresses
       allowedHosts: [
-        'http://payal-strapi-alb-846039926.us-east-1.elb.amazonaws.com',
+        'payal-strapi-alb-846039926.us-east-1.elb.amazonaws.com',
         // You can add more allowed hosts if needed
       ],
     },
