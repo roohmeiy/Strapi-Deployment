@@ -31,4 +31,8 @@ This project containerizes a Strapi CMS application using a multi-stage Dockerfi
     cat /home/ubuntu/.ssh/my-ec2-key
     cat /home/ubuntu/.ssh/my-ec2-key.pub
     ```
+
+## To deploy with npm
+- rename example-vite-config.ts file to vite.config.ts
+- allow host in vite.config.ts 
     

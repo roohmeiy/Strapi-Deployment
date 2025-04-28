@@ -48,6 +48,7 @@ Terraform-ecs-cloudwatch/.terraform.lock.hcl
 *.tfstate
 *.tfstate.*
 *.tfvars
-
+*.terraform
+*.terraform.lock.hcl
 Terraform/payal-rsa.pub
 
