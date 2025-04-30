@@ -20,7 +20,6 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       image: ${{ steps.build_image.outputs.image }}
-      image_tag: ${{ github.sha }}
     
     steps:
     - name: Checkout code
@@ -48,6 +47,7 @@ jobs:
         docker build -t $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG .
         docker push $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG
         echo "image=$ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG" >> $GITHUB_OUTPUT
+        echo "Built and pushed image: $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG"
 
   deploy:
     name: Deploy Infrastructure
@@ -55,7 +55,6 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       apply_status: ${{ steps.apply.outcome }}
-      alb_dns_name: ${{ steps.get_outputs.outputs.alb_dns_name }}
     
     steps:
     - name: Checkout code
@@ -131,22 +130,7 @@ jobs:
         TF_VAR_transfer_token_salt: ${{ secrets.TRANSFER_TOKEN_SALT }}
         TF_VAR_app_keys: ${{ secrets.APP_KEYS }}
         TF_VAR_aws_region: ${{ secrets.AWS_REGION }}
-        
-    - name: Get Terraform Outputs
-      id: get_outputs
-      if: steps.apply.outputs.apply_status == 'success'
-      working-directory: ./Terraform-blue-green-deployment
-      run: |
-        # Check if the output exists first
-        if terraform output -no-color -json | jq -e 'has("alb_dns_name")' > /dev/null; then
-          ALB_DNS=$(terraform output -no-color -raw alb_dns_name)
-          echo "alb_dns_name=$ALB_DNS" >> $GITHUB_OUTPUT
-          echo "Retrieved ALB DNS: $ALB_DNS"
-        else
-          echo "alb_dns_name=not-available" >> $GITHUB_OUTPUT
-          echo "Warning: ALB DNS output not found. Setting placeholder value."
-        fi
-  
+
   deploy_new_version:
     name: Deploy New Version with Blue/Green
     needs: [prepare, deploy]
@@ -163,6 +147,14 @@ jobs:
         aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
         aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
         aws-region: ${{ secrets.AWS_REGION }}
+    
+    - name: Debug image output
+      run: |
+        echo "Image from prepare job: ${{ needs.prepare.outputs.image }}"
+        # Check if image is empty
+        if [ -z "${{ needs.prepare.outputs.image }}" ]; then
+          echo "WARNING: Image output is empty!"
+        fi
       
     - name: Register new task definition for CodeDeploy
       id: register_task_def
@@ -170,8 +162,18 @@ jobs:
         # Get current task definition
         TASK_DEFINITION=$(aws ecs describe-task-definition --task-definition ${{ secrets.TASK_DEFINITION_NAME }} --query 'taskDefinition' --output json)
         
+        # Set image variable
+        IMAGE="${{ needs.prepare.outputs.image }}"
+        echo "Using Docker image: $IMAGE"
+        
+        # Ensure the image is not empty
+        if [ -z "$IMAGE" ]; then
+          echo "Error: Docker image URI is empty!"
+          exit 1
+        fi
+        
         # Update the task definition with the new image
-        TASK_DEFINITION=$(echo $TASK_DEFINITION | jq --arg IMAGE "${{ needs.prepare.outputs.image }}" '.containerDefinitions[0].image = $IMAGE')
+        TASK_DEFINITION=$(echo $TASK_DEFINITION | jq --arg IMAGE "$IMAGE" '.containerDefinitions[0].image = $IMAGE')
         
         # Remove unnecessary fields for registering a new task definition
         TASK_DEFINITION=$(echo $TASK_DEFINITION | jq 'del(.taskDefinitionArn, .revision, .status, .requiresAttributes, .compatibilities, .registeredAt, .registeredBy)')
@@ -250,14 +252,16 @@ jobs:
           sleep 15
         done
     
-    - name: Deployment Summary
+    - name: Get ALB DNS Name
+      id: get_alb_dns
       run: |
-        echo "Deployment completed successfully."
-        echo "Application is available at: http://${{ needs.deploy.outputs.alb_dns_name }}"
+        ALB_NAME=${{ secrets.ALB_NAME }}
+        ALB_INFO=$(aws elbv2 describe-load-balancers --names $ALB_NAME --query 'LoadBalancers[0].DNSName' --output text)
+        echo "Application available at: http://$ALB_INFO"
 
   # cleanup:
   #   name: Cleanup on Failure
-  #   needs: [ deploy]
+  #   needs: [deploy]
   #   runs-on: ubuntu-latest
   #   if: needs.deploy.outputs.apply_status == 'failure' || failure()
     
