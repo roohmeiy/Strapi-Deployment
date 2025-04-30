@@ -11,7 +11,7 @@ on:
         - '.github/workflows/destroy.yml'
         - '.github/workflows/strapi-ecs.yml'
         - '.github/workflows/strapi-ecs-withcloudwatch.yml'
-        - 'appspec.yml'
+        - 'appspec.yaml'
 
   workflow_dispatch:
 
@@ -195,14 +195,24 @@ jobs:
       run: |
         echo "Updating appspec.yaml with new task definition ARN"
         
-        # Replace the TaskDefinition placeholder with the actual ARN
+        # Replace the TaskDefinition value with the actual ARN
         TASK_DEF_ARN="${{ steps.register_task_def.outputs.task_definition_arn }}"
         
-        # Update the TaskDefinition in the appspec.yaml file
+        # Use double quotes to ensure proper variable expansion
         sed -i "s|TaskDefinition:.*|TaskDefinition: $TASK_DEF_ARN|g" appspec.yaml
         
-        # Validate the updated YAML file
-        echo "Updated appspec.yaml:"
+        # Verify the update was successful
+        if grep -q "$TASK_DEF_ARN" appspec.yaml; then
+          echo "Successfully updated appspec.yaml with ARN: $TASK_DEF_ARN"
+        else
+          echo "Failed to update appspec.yaml with ARN: $TASK_DEF_ARN"
+          echo "Current content of appspec.yaml:"
+          cat appspec.yaml
+          exit 1
+        fi
+        
+        # Show the updated file for verification
+        echo "Updated appspec.yaml content:"
         cat appspec.yaml
         
     - name: Create deployment with AWS CodeDeploy
@@ -212,7 +222,10 @@ jobs:
         APPLICATION_NAME="${{ secrets.CODEDEPLOY_APPLICATION_NAME || 'payal-strapi-codedeploy_app_name' }}"
         DEPLOYMENT_GROUP="${{ secrets.CODEDEPLOY_DEPLOYMENT_GROUP || 'payal-strapi-codedeploy_deployment_group' }}"
 
-        # Start the deployment using the appspec.yaml file
+        # Start the deployment using the updated appspec.yaml file
+        echo "Using updated appspec.yaml for deployment"
+        cat appspec.yaml
+        
         DEPLOYMENT_ID=$(aws deploy create-deployment \
           --application-name $APPLICATION_NAME \
           --deployment-group-name $DEPLOYMENT_GROUP \
