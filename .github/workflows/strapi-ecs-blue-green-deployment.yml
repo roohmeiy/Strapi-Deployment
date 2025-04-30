@@ -11,6 +11,7 @@ on:
         - '.github/workflows/destroy.yml'
         - '.github/workflows/strapi-ecs.yml'
         - '.github/workflows/strapi-ecs-withcloudwatch.yml'
+        - 'appspec.yml'
 
   workflow_dispatch:
 
@@ -46,8 +47,6 @@ jobs:
         # Build a docker container and push it to ECR with SHA tag only
         docker build -t $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG .
         docker push $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG
-        # echo "image=$ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG" >> $GITHUB_OUTPUT
-        # echo "Built and pushed image: $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG"
         FULL_IMAGE_URI="$ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG"
         echo "Full image URI: $FULL_IMAGE_URI"
         # Set the variable for use in the next step
@@ -163,7 +162,6 @@ jobs:
         echo "Image from prepare job: '${{ needs.prepare.outputs.image }}'"
         # Store in an environment variable for later use
         echo "IMAGE_URI=${{ needs.prepare.outputs.image }}" >> $GITHUB_ENV
-
       
     - name: Register new task definition for CodeDeploy
       id: register_task_def
@@ -193,33 +191,28 @@ jobs:
         NEW_TASK_DEF_ARN=$(echo $NEW_TASK_DEF | jq -r '.taskDefinition.taskDefinitionArn')
         echo "task_definition_arn=$NEW_TASK_DEF_ARN" >> $GITHUB_OUTPUT
 
-    - name: Create AppSpec file
+    - name: Update AppSpec file
       run: |
-        echo "version: 0.0" > appspec.yaml
-        echo "Resources:" >> appspec.yaml
-        echo "  - TargetService:" >> appspec.yaml
-        echo "      Type: AWS::ECS::Service" >> appspec.yaml
-        echo "      Properties:" >> appspec.yaml
-        echo "        TaskDefinition: \${{ steps.register_task_def.outputs.task_definition_arn }}" >> appspec.yaml
-        echo "        LoadBalancerInfo:" >> appspec.yaml
-        echo "          ContainerName: \"strapi-app\"" >> appspec.yaml
-        echo "          ContainerPort: 1337" >> appspec.yaml
-
-        # Validate YAML file
+        echo "Updating appspec.yaml with new task definition ARN"
+        
+        # Replace the TaskDefinition placeholder with the actual ARN
+        TASK_DEF_ARN="${{ steps.register_task_def.outputs.task_definition_arn }}"
+        
+        # Update the TaskDefinition in the appspec.yaml file
+        sed -i "s|TaskDefinition:.*|TaskDefinition: $TASK_DEF_ARN|g" appspec.yaml
+        
+        # Validate the updated YAML file
+        echo "Updated appspec.yaml:"
         cat appspec.yaml
         
     - name: Create deployment with AWS CodeDeploy
       id: create_deployment
       run: |
         # Get the CodeDeploy application and deployment group names
-        # APPLICATION_NAME="${{ secrets.CODEDEPLOY_APPLICATION_NAME }}"
-        # DEPLOYMENT_GROUP="${{ secrets.CODEDEPLOY_DEPLOYMENT_GROUP }}"
-        
         APPLICATION_NAME="${{ secrets.CODEDEPLOY_APPLICATION_NAME || 'payal-strapi-codedeploy_app_name' }}"
         DEPLOYMENT_GROUP="${{ secrets.CODEDEPLOY_DEPLOYMENT_GROUP || 'payal-strapi-codedeploy_deployment_group' }}"
 
-
-        # Start the deployment
+        # Start the deployment using the appspec.yaml file
         DEPLOYMENT_ID=$(aws deploy create-deployment \
           --application-name $APPLICATION_NAME \
           --deployment-group-name $DEPLOYMENT_GROUP \
