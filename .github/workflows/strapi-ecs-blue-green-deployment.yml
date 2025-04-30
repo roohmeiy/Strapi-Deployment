@@ -195,17 +195,18 @@ jobs:
 
     - name: Create AppSpec file
       run: |
-        cat << EOF > appspec.yaml
-        version: 0.0
-        Resources:
-          - TargetService:
-              Type: AWS::ECS::Service
-              Properties:
-                TaskDefinition: "${{ steps.register_task_def.outputs.task_definition_arn }}"
-                LoadBalancerInfo:
-                  ContainerName: "strapi-app"
-                  ContainerPort: 1337
-        EOF
+        echo 'version: 0.0' > appspec.yaml
+        echo 'Resources:' >> appspec.yaml
+        echo '  - TargetService:' >> appspec.yaml
+        echo '      Type: AWS::ECS::Service' >> appspec.yaml
+        echo '      Properties:' >> appspec.yaml
+        echo "        TaskDefinition: ${{ steps.register_task_def.outputs.task_definition_arn }}" >> appspec.yaml
+        echo '        LoadBalancerInfo:' >> appspec.yaml
+        echo '          ContainerName: "strapi-app"' >> appspec.yaml
+        echo '          ContainerPort: 1337' >> appspec.yaml
+    
+        # Validate YAML file
+        cat appspec.yaml
         
     - name: Create deployment with AWS CodeDeploy
       id: create_deployment
