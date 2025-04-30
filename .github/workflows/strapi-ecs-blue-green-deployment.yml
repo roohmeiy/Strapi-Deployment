@@ -137,7 +137,7 @@ jobs:
       if: steps.apply.outputs.apply_status == 'success'
       working-directory: ./Terraform-blue-green-deployment
       run: |
-        ALB_DNS=$(terraform output -raw alb_dns_name || echo "")
+        ALB_DNS=$(terraform output -no-color -raw alb_dns_name 2>/dev/null || echo "")
         echo "alb_dns_name=$ALB_DNS" >> $GITHUB_OUTPUT
 
   deploy_new_version:
@@ -278,7 +278,7 @@ jobs:
         AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
 
     - name: Terraform Destroy
-      working-directory: ./Terraform-ecs-cicd
+      working-directory: ./Terraform-blue-green-deployment
       run: |
         echo "Starting cleanup of resources..."
         terraform destroy -auto-approve
