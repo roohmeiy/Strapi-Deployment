@@ -211,9 +211,13 @@ jobs:
       id: create_deployment
       run: |
         # Get the CodeDeploy application and deployment group names
-        APPLICATION_NAME="${{ secrets.CODEDEPLOY_APPLICATION_NAME }}"
-        DEPLOYMENT_GROUP="${{ secrets.CODEDEPLOY_DEPLOYMENT_GROUP }}"
+        # APPLICATION_NAME="${{ secrets.CODEDEPLOY_APPLICATION_NAME }}"
+        # DEPLOYMENT_GROUP="${{ secrets.CODEDEPLOY_DEPLOYMENT_GROUP }}"
         
+        APPLICATION_NAME="${{ secrets.CODEDEPLOY_APPLICATION_NAME || 'payal-strapi-codedeploy_app_name' }}"
+        DEPLOYMENT_GROUP="${{ secrets.CODEDEPLOY_DEPLOYMENT_GROUP || 'payal-strapi-codedeploy_deployment_group' }}"
+
+
         # Start the deployment
         DEPLOYMENT_ID=$(aws deploy create-deployment \
           --application-name $APPLICATION_NAME \
