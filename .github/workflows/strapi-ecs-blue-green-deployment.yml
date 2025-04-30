@@ -46,6 +46,8 @@ jobs:
         # Build a docker container and push it to ECR with SHA tag only
         docker build -t $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG .
         docker push $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG
+        # echo "image=$ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG" >> $GITHUB_OUTPUT
+        # echo "Built and pushed image: $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG"
         FULL_IMAGE_URI="$ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG"
         echo "Full image URI: $FULL_IMAGE_URI"
         # Set the variable for use in the next step
@@ -161,6 +163,7 @@ jobs:
         echo "Image from prepare job: '${{ needs.prepare.outputs.image }}'"
         # Store in an environment variable for later use
         echo "IMAGE_URI=${{ needs.prepare.outputs.image }}" >> $GITHUB_ENV
+
       
     - name: Register new task definition for CodeDeploy
       id: register_task_def
@@ -192,43 +195,35 @@ jobs:
 
     - name: Create AppSpec file
       run: |
-        # Create AppSpec file inline without heredoc
-        echo "{" > appspec.json
-        echo "  \"version\": 0.0," >> appspec.json
-        echo "  \"Resources\": [" >> appspec.json
-        echo "    {" >> appspec.json
-        echo "      \"TargetService\": {" >> appspec.json
-        echo "        \"Type\": \"AWS::ECS::Service\"," >> appspec.json
-        echo "        \"Properties\": {" >> appspec.json
-        echo "          \"TaskDefinition\": \"${{ steps.register_task_def.outputs.task_definition_arn }}\"," >> appspec.json
-        echo "          \"LoadBalancerInfo\": {" >> appspec.json
-        echo "            \"ContainerName\": \"strapi-app\"," >> appspec.json
-        echo "            \"ContainerPort\": 1337" >> appspec.json
-        echo "          }" >> appspec.json
-        echo "        }" >> appspec.json
-        echo "      }" >> appspec.json
-        echo "    }" >> appspec.json
-        echo "  ]" >> appspec.json
-        echo "}" >> appspec.json
-        
-        # Display the file for debugging
-        cat appspec.json
+        echo "version: 0.0" > appspec.yaml
+        echo "Resources:" >> appspec.yaml
+        echo "  - TargetService:" >> appspec.yaml
+        echo "      Type: AWS::ECS::Service" >> appspec.yaml
+        echo "      Properties:" >> appspec.yaml
+        echo "        TaskDefinition: \${{ steps.register_task_def.outputs.task_definition_arn }}" >> appspec.yaml
+        echo "        LoadBalancerInfo:" >> appspec.yaml
+        echo "          ContainerName: \"strapi-app\"" >> appspec.yaml
+        echo "          ContainerPort: 1337" >> appspec.yaml
+
+        # Validate YAML file
+        cat appspec.yaml
         
     - name: Create deployment with AWS CodeDeploy
       id: create_deployment
       run: |
         # Get the CodeDeploy application and deployment group names
+        # APPLICATION_NAME="${{ secrets.CODEDEPLOY_APPLICATION_NAME }}"
+        # DEPLOYMENT_GROUP="${{ secrets.CODEDEPLOY_DEPLOYMENT_GROUP }}"
+        
         APPLICATION_NAME="${{ secrets.CODEDEPLOY_APPLICATION_NAME || 'payal-strapi-codedeploy_app_name' }}"
         DEPLOYMENT_GROUP="${{ secrets.CODEDEPLOY_DEPLOYMENT_GROUP || 'payal-strapi-codedeploy_deployment_group' }}"
-        
-        # Create a base64 encoding of the appspec file
-        APPSPEC_CONTENT=$(base64 -w 0 appspec.json)
-        
-        # Start the deployment with proper JSON string formatting
+
+
+        # Start the deployment
         DEPLOYMENT_ID=$(aws deploy create-deployment \
-          --application-name "$APPLICATION_NAME" \
-          --deployment-group-name "$DEPLOYMENT_GROUP" \
-          --revision "revisionType=AppSpecContent,appSpecContent={content=\"$APPSPEC_CONTENT\"}" \
+          --application-name $APPLICATION_NAME \
+          --deployment-group-name $DEPLOYMENT_GROUP \
+          --revision revisionType=AppSpecContent,appSpecContent="{content=\"$(cat appspec.yaml | base64 -w 0)\"}" \
           --description "Deployment triggered by GitHub Actions - ${{ github.sha }}" \
           --query 'deploymentId' \
           --output text)
