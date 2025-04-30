@@ -3,7 +3,7 @@
 #   description = "URL of the ECR repository for your script to push to"
 # }
 
-output "alb_url" {
-  description = "Public URL of the Application Load Balancer"
+output "alb_dns_name" {
   value       = aws_lb.strapi_alb.dns_name
+  description = "The DNS name of the Application Load Balancer"
 }
