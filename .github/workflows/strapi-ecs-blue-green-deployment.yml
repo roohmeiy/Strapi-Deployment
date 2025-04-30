@@ -46,8 +46,18 @@ jobs:
         # Build a docker container and push it to ECR with SHA tag only
         docker build -t $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG .
         docker push $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG
-        echo "image=$ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG" >> $GITHUB_OUTPUT
-        echo "Built and pushed image: $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG"
+        # echo "image=$ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG" >> $GITHUB_OUTPUT
+        # echo "Built and pushed image: $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG"
+        FULL_IMAGE_URI="$ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG"
+        echo "Full image URI: $FULL_IMAGE_URI"
+        # Set the variable for use in the next step
+        echo "full_image_uri=$FULL_IMAGE_URI" >> $GITHUB_ENV
+
+    - name: Set job outputs
+      id: set_outputs
+      run: |
+        echo "image=${{ env.full_image_uri }}" >> $GITHUB_OUTPUT
+        echo "Output image value: ${{ env.full_image_uri }}"
 
   deploy:
     name: Deploy Infrastructure
@@ -150,41 +160,39 @@ jobs:
     
     - name: Debug image output
       run: |
-        echo "Image from prepare job: ${{ needs.prepare.outputs.image }}"
-        # Check if image is empty
-        if [ -z "${{ needs.prepare.outputs.image }}" ]; then
-          echo "WARNING: Image output is empty!"
-        fi
+        echo "Image from prepare job: '${{ needs.prepare.outputs.image }}'"
+        # Store in an environment variable for later use
+        echo "IMAGE_URI=${{ needs.prepare.outputs.image }}" >> $GITHUB_ENV
+
       
     - name: Register new task definition for CodeDeploy
       id: register_task_def
       run: |
         # Get current task definition
-        TASK_DEFINITION=$(aws ecs describe-task-definition --task-definition ${{ secrets.TASK_DEFINITION_NAME }} --query 'taskDefinition' --output json)
-        
+        TASK_DEFINITION=$(aws ecs describe-task-definition --task-definition ${{ secrets.TASK_DEFINITION_NAME }} --query 'taskDefinition' --output json)        
         # Set image variable
-        IMAGE="${{ needs.prepare.outputs.image }}"
-        echo "Using Docker image: $IMAGE"
+        IMAGE="${{ env.IMAGE_URI }}"
+        echo "Using Docker image: '$IMAGE'"
         
         # Ensure the image is not empty
         if [ -z "$IMAGE" ]; then
-          echo "Error: Docker image URI is empty!"
-          exit 1
+          echo "Warning: Image output was empty, constructing directly..."
+          ECR_REGISTRY=$(aws ecr describe-repositories --repository-names ${{ secrets.ECR_REPOSITORY_NAME }} --query 'repositories[0].repositoryUri' --output text)
+          IMAGE_TAG="${{ github.sha }}"
+          IMAGE="${ECR_REGISTRY}:${IMAGE_TAG}"
+          echo "Constructed image URI: $IMAGE"
         fi
         
         # Update the task definition with the new image
-        TASK_DEFINITION=$(echo $TASK_DEFINITION | jq --arg IMAGE "$IMAGE" '.containerDefinitions[0].image = $IMAGE')
-        
+        TASK_DEFINITION=$(echo $TASK_DEFINITION | jq --arg IMAGE "$IMAGE" '.containerDefinitions[0].image = $IMAGE')        
         # Remove unnecessary fields for registering a new task definition
-        TASK_DEFINITION=$(echo $TASK_DEFINITION | jq 'del(.taskDefinitionArn, .revision, .status, .requiresAttributes, .compatibilities, .registeredAt, .registeredBy)')
-        
+        TASK_DEFINITION=$(echo $TASK_DEFINITION | jq 'del(.taskDefinitionArn, .revision, .status, .requiresAttributes, .compatibilities, .registeredAt, .registeredBy)')        
         # Register the new task definition
-        NEW_TASK_DEF=$(aws ecs register-task-definition --cli-input-json "$TASK_DEFINITION")
-        
+        NEW_TASK_DEF=$(aws ecs register-task-definition --cli-input-json "$TASK_DEFINITION")        
         # Store the new task definition ARN
         NEW_TASK_DEF_ARN=$(echo $NEW_TASK_DEF | jq -r '.taskDefinition.taskDefinitionArn')
         echo "task_definition_arn=$NEW_TASK_DEF_ARN" >> $GITHUB_OUTPUT
-        
+
     - name: Create AppSpec file
       run: |
         cat << EOF > appspec.yaml
