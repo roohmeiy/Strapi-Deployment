@@ -211,8 +211,8 @@ jobs:
       id: create_deployment
       run: |
         # Get the CodeDeploy application and deployment group names
-        APPLICATION_NAME="strapi-app"
-        DEPLOYMENT_GROUP="strapi-deployment-group"
+        APPLICATION_NAME="${{ secrets.CODEDEPLOY_APPLICATION_NAME }}"
+        DEPLOYMENT_GROUP="${{ secrets.CODEDEPLOY_DEPLOYMENT_GROUP }}"
         
         # Start the deployment
         DEPLOYMENT_ID=$(aws deploy create-deployment \
@@ -263,7 +263,7 @@ jobs:
     - name: Get ALB DNS Name
       id: get_alb_dns
       run: |
-        ALB_NAME=${{ secrets.ALB_NAME }}
+        ALB_NAME=${{ secrets.ALB_NAME }} 
         ALB_INFO=$(aws elbv2 describe-load-balancers --names $ALB_NAME --query 'LoadBalancers[0].DNSName' --output text)
         echo "Application available at: http://$ALB_INFO"
 
