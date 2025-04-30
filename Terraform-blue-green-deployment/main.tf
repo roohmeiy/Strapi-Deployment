@@ -246,7 +246,7 @@ resource "aws_lb_listener" "strapi_listener_prod" {
 # Load Balancer Listener - Test (used during deployment)
 resource "aws_lb_listener" "strapi_listener_test" {
   load_balancer_arn = aws_lb.strapi_alb.arn
-  port              = 80  # Test port
+  port              = 8080  # Test port
   protocol          = "HTTP"
 
   default_action {
