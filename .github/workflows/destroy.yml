@@ -25,14 +25,14 @@ jobs:
           terraform_version: 1.11.3
 
       - name: Terraform Init
-        working-directory: ./Terraform-ecs-cicd
+        working-directory: ./Terraform-blue-green-deployment
         run: terraform init
         env:
             AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
             AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
 
       - name: Terraform Destroy
-        working-directory: ./Terraform-blue-green-deployment.yml
+        working-directory: ./Terraform-blue-green-deployment
         run: |
               echo "Starting cleanup of resources..."
               terraform destroy -auto-approve
