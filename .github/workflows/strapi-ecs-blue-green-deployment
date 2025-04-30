@@ -1,0 +1,301 @@
+name: Deploy Strapi to AWS ECS with Blue/Green
+
+on:
+  push:
+    branches: [ main ]
+    paths-ignore:
+        - 'README.md'
+        - '.github/latest-image-tag.txt'
+        - '.github/workflows/ci.yml'
+        - '.github/workflows/cd.yml'
+        - '.github/workflows/destroy.yml'
+        - '.github/workflows/strapi-ecs.yml'
+        - '.github/workflows/strapi-ecs-withcloudwatch.yml'
+
+  workflow_dispatch:
+
+jobs:
+  prepare:
+    name: Prepare Environment
+    runs-on: ubuntu-latest
+    outputs:
+      image: ${{ steps.build_image.outputs.image }}
+      image_tag: ${{ github.sha }}
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v3
+
+    - name: Configure AWS credentials
+      uses: aws-actions/configure-aws-credentials@v1
+      with:
+        aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+        aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+        aws-region: ${{ secrets.AWS_REGION }}
+
+    - name: Login to Amazon ECR
+      id: login-ecr
+      uses: aws-actions/amazon-ecr-login@v1
+
+    - name: Build, tag, and push image to Amazon ECR
+      id: build_image
+      env:
+        ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+        ECR_REPOSITORY: ${{ secrets.ECR_REPOSITORY_NAME }}
+        IMAGE_TAG: ${{ github.sha }}
+      run: |
+        # Build a docker container and push it to ECR with SHA tag only
+        docker build -t $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG .
+        docker push $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG
+        echo "image=$ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG" >> $GITHUB_OUTPUT
+
+  deploy:
+    name: Deploy Infrastructure
+    needs: prepare
+    runs-on: ubuntu-latest
+    outputs:
+      apply_status: ${{ steps.apply.outcome }}
+      alb_dns_name: ${{ steps.get_outputs.outputs.alb_dns_name }}
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v3
+
+    - name: Configure AWS credentials
+      uses: aws-actions/configure-aws-credentials@v1
+      with:
+        aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+        aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+        aws-region: ${{ secrets.AWS_REGION }}
+
+    - name: Setup Terraform
+      uses: hashicorp/setup-terraform@v2
+      with:
+        terraform_version: 1.11.3
+
+    - name: Terraform Init
+      id: init
+      working-directory: ./Terraform-blue-green-deployment
+      run: terraform init
+      env:
+        AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+        AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+
+    - name: Terraform Plan
+      id: plan
+      working-directory: ./Terraform-blue-green-deployment
+      run: terraform plan -out=tfplan 
+      env:
+        TF_VAR_ecr_repo_name: ${{ secrets.ECR_REPOSITORY_NAME }}
+        TF_VAR_image_tag: ${{ github.sha }}
+        TF_VAR_vpc_name: ${{ secrets.VPC_NAME }}
+        TF_VAR_igw_name: ${{ secrets.IGW_NAME }}
+        TF_VAR_security_group_name: ${{ secrets.SECURITY_GROUP_NAME }}
+        TF_VAR_ecs_cluster_name: ${{ secrets.ECS_CLUSTER_NAME }}
+        TF_VAR_task_definition_name: ${{ secrets.TASK_DEFINITION_NAME }}
+        TF_VAR_ecs_service_name: ${{ secrets.ECS_SERVICE_NAME }}
+        TF_VAR_alb_name: ${{ secrets.ALB_NAME }}
+        TF_VAR_target_group_name: ${{ secrets.TARGET_GROUP_NAME }}
+        TF_VAR_api_token_salt: ${{ secrets.API_TOKEN_SALT }}
+        TF_VAR_admin_jwt_secret: ${{ secrets.ADMIN_JWT_SECRET }}
+        TF_VAR_transfer_token_salt: ${{ secrets.TRANSFER_TOKEN_SALT }}
+        TF_VAR_app_keys: ${{ secrets.APP_KEYS }}
+        TF_VAR_aws_region: ${{ secrets.AWS_REGION }}
+        
+    - name: Terraform Apply
+      id: apply
+      working-directory: ./Terraform-blue-green-deployment
+      run: |
+        set -e
+        if terraform apply -auto-approve tfplan; then
+          echo "Terraform apply succeeded"
+          echo "apply_status=success" >> $GITHUB_OUTPUT
+        else
+          echo "Terraform apply failed"
+          echo "apply_status=failure" >> $GITHUB_OUTPUT
+          exit 1
+        fi
+      env:
+        TF_VAR_ecr_repo_name: ${{ secrets.ECR_REPOSITORY_NAME }}
+        TF_VAR_image_tag: ${{ github.sha }}
+        TF_VAR_vpc_name: ${{ secrets.VPC_NAME }}
+        TF_VAR_igw_name: ${{ secrets.IGW_NAME }}
+        TF_VAR_security_group_name: ${{ secrets.SECURITY_GROUP_NAME }}
+        TF_VAR_ecs_cluster_name: ${{ secrets.ECS_CLUSTER_NAME }}
+        TF_VAR_task_definition_name: ${{ secrets.TASK_DEFINITION_NAME }}
+        TF_VAR_ecs_service_name: ${{ secrets.ECS_SERVICE_NAME }}
+        TF_VAR_alb_name: ${{ secrets.ALB_NAME }}
+        TF_VAR_target_group_name: ${{ secrets.TARGET_GROUP_NAME }}
+        TF_VAR_api_token_salt: ${{ secrets.API_TOKEN_SALT }}
+        TF_VAR_admin_jwt_secret: ${{ secrets.ADMIN_JWT_SECRET }}
+        TF_VAR_transfer_token_salt: ${{ secrets.TRANSFER_TOKEN_SALT }}
+        TF_VAR_app_keys: ${{ secrets.APP_KEYS }}
+        TF_VAR_aws_region: ${{ secrets.AWS_REGION }}
+        
+    - name: Get Terraform Outputs
+      id: get_outputs
+      if: steps.apply.outputs.apply_status == 'success'
+      working-directory: ./Terraform-blue-green-deployment
+      run: |
+        ALB_DNS=$(terraform output -raw alb_dns_name || echo "")
+        echo "alb_dns_name=$ALB_DNS" >> $GITHUB_OUTPUT
+
+  deploy_new_version:
+    name: Deploy New Version with Blue/Green
+    needs: [prepare, deploy]
+    runs-on: ubuntu-latest
+    if: needs.deploy.outputs.apply_status == 'success'
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v3
+
+    - name: Configure AWS credentials
+      uses: aws-actions/configure-aws-credentials@v1
+      with:
+        aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+        aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+        aws-region: ${{ secrets.AWS_REGION }}
+      
+    - name: Register new task definition for CodeDeploy
+      id: register_task_def
+      run: |
+        # Get current task definition
+        TASK_DEFINITION=$(aws ecs describe-task-definition --task-definition ${{ secrets.TASK_DEFINITION_NAME }} --query 'taskDefinition' --output json)
+        
+        # Update the task definition with the new image
+        TASK_DEFINITION=$(echo $TASK_DEFINITION | jq --arg IMAGE "${{ needs.prepare.outputs.image }}" '.containerDefinitions[0].image = $IMAGE')
+        
+        # Remove unnecessary fields for registering a new task definition
+        TASK_DEFINITION=$(echo $TASK_DEFINITION | jq 'del(.taskDefinitionArn, .revision, .status, .requiresAttributes, .compatibilities, .registeredAt, .registeredBy)')
+        
+        # Register the new task definition
+        NEW_TASK_DEF=$(aws ecs register-task-definition --cli-input-json "$TASK_DEFINITION")
+        
+        # Store the new task definition ARN
+        NEW_TASK_DEF_ARN=$(echo $NEW_TASK_DEF | jq -r '.taskDefinition.taskDefinitionArn')
+        echo "task_definition_arn=$NEW_TASK_DEF_ARN" >> $GITHUB_OUTPUT
+        
+    - name: Create AppSpec file
+      run: |
+        cat << EOF > appspec.yaml
+        version: 0.0
+        Resources:
+          - TargetService:
+              Type: AWS::ECS::Service
+              Properties:
+                TaskDefinition: "${{ steps.register_task_def.outputs.task_definition_arn }}"
+                LoadBalancerInfo:
+                  ContainerName: "strapi-app"
+                  ContainerPort: 1337
+        EOF
+        
+    - name: Create deployment with AWS CodeDeploy
+      id: create_deployment
+      run: |
+        # Get the CodeDeploy application and deployment group names
+        APPLICATION_NAME="strapi-app"
+        DEPLOYMENT_GROUP="strapi-deployment-group"
+        
+        # Start the deployment
+        DEPLOYMENT_ID=$(aws deploy create-deployment \
+          --application-name $APPLICATION_NAME \
+          --deployment-group-name $DEPLOYMENT_GROUP \
+          --revision revisionType=AppSpecContent,appSpecContent="{content=\"$(cat appspec.yaml | base64 -w 0)\"}" \
+          --description "Deployment triggered by GitHub Actions - ${{ github.sha }}" \
+          --query 'deploymentId' \
+          --output text)
+        
+        echo "deployment_id=$DEPLOYMENT_ID" >> $GITHUB_OUTPUT
+        echo "Deployment ID: $DEPLOYMENT_ID"
+    
+    - name: Wait for deployment to complete
+      run: |
+        DEPLOYMENT_ID="${{ steps.create_deployment.outputs.deployment_id }}"
+        echo "Waiting for deployment $DEPLOYMENT_ID to complete..."
+        
+        # Initialize status
+        STATUS="InProgress"
+        
+        # Loop until deployment is no longer in progress
+        while [ "$STATUS" == "InProgress" ] || [ "$STATUS" == "Created" ] || [ "$STATUS" == "Queued" ] || [ "$STATUS" == "Ready" ]; do
+          # Get current deployment status
+          STATUS=$(aws deploy get-deployment \
+            --deployment-id $DEPLOYMENT_ID \
+            --query 'deploymentInfo.status' \
+            --output text)
+          
+          echo "Current deployment status: $STATUS"
+          
+          # If deployment failed, exit with error
+          if [ "$STATUS" == "Failed" ] || [ "$STATUS" == "Stopped" ]; then
+            echo "Deployment failed with status: $STATUS"
+            exit 1
+          fi
+          
+          # If deployment succeeded, break the loop
+          if [ "$STATUS" == "Succeeded" ]; then
+            echo "Deployment completed successfully!"
+            break
+          fi
+          
+          # Wait before checking again
+          sleep 15
+        done
+    
+    - name: Deployment Summary
+      run: |
+        echo "Deployment completed successfully."
+        echo "Application is available at: http://${{ needs.deploy.outputs.alb_dns_name }}"
+
+  cleanup:
+    name: Cleanup on Failure
+    needs: [ deploy]
+    runs-on: ubuntu-latest
+    if: needs.deploy.outputs.apply_status == 'failure' || failure()
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v3
+
+    - name: Configure AWS credentials
+      uses: aws-actions/configure-aws-credentials@v1
+      with:
+        aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+        aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+        aws-region: ${{ secrets.AWS_REGION }}
+
+    - name: Setup Terraform
+      uses: hashicorp/setup-terraform@v2
+      with:
+        terraform_version: 1.11.3
+
+    - name: Terraform Init
+      working-directory: ./Terraform-blue-green-deployment
+      run: terraform init
+      env:
+        AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+        AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+
+    - name: Terraform Destroy
+      working-directory: ./Terraform-ecs-cicd
+      run: |
+        echo "Starting cleanup of resources..."
+        terraform destroy -auto-approve
+        echo "Cleanup completed"
+      env:
+        TF_VAR_ecr_repo_name: ${{ secrets.ECR_REPOSITORY_NAME }}
+        TF_VAR_image_tag: ${{ github.sha }}
+        TF_VAR_vpc_name: ${{ secrets.VPC_NAME }}
+        TF_VAR_igw_name: ${{ secrets.IGW_NAME }}
+        TF_VAR_security_group_name: ${{ secrets.SECURITY_GROUP_NAME }}
+        TF_VAR_ecs_cluster_name: ${{ secrets.ECS_CLUSTER_NAME }}
+        TF_VAR_task_definition_name: ${{ secrets.TASK_DEFINITION_NAME }}
+        TF_VAR_ecs_service_name: ${{ secrets.ECS_SERVICE_NAME }}
+        TF_VAR_alb_name: ${{ secrets.ALB_NAME }}
+        TF_VAR_target_group_name: ${{ secrets.TARGET_GROUP_NAME }}
+        TF_VAR_api_token_salt: ${{ secrets.API_TOKEN_SALT }}
+        TF_VAR_admin_jwt_secret: ${{ secrets.ADMIN_JWT_SECRET }}
+        TF_VAR_transfer_token_salt: ${{ secrets.TRANSFER_TOKEN_SALT }}
+        TF_VAR_app_keys: ${{ secrets.APP_KEYS }}
+        TF_VAR_aws_region: ${{ secrets.AWS_REGION }}
