@@ -137,9 +137,16 @@ jobs:
       if: steps.apply.outputs.apply_status == 'success'
       working-directory: ./Terraform-blue-green-deployment
       run: |
-        ALB_DNS=$(terraform output -no-color -raw alb_dns_name 2>/dev/null || echo "")
-        echo "alb_dns_name=$ALB_DNS" >> $GITHUB_OUTPUT
-
+        # Check if the output exists first
+        if terraform output -no-color -json | jq -e 'has("alb_dns_name")' > /dev/null; then
+          ALB_DNS=$(terraform output -no-color -raw alb_dns_name)
+          echo "alb_dns_name=$ALB_DNS" >> $GITHUB_OUTPUT
+          echo "Retrieved ALB DNS: $ALB_DNS"
+        else
+          echo "alb_dns_name=not-available" >> $GITHUB_OUTPUT
+          echo "Warning: ALB DNS output not found. Setting placeholder value."
+        fi
+  
   deploy_new_version:
     name: Deploy New Version with Blue/Green
     needs: [prepare, deploy]
