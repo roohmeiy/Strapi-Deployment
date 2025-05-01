@@ -14,14 +14,12 @@ on:
 
   workflow_dispatch:
 
-env:
-  ECR_REPOSITORY: ${{ secrets.ECR_REPOSITORY_NAME }}
-  IMAGE_TAG: ${{ github.sha }}
-
 jobs:
-  deploy:
-    name: Build and Deploy
+  prepare:
+    name: Prepare Environment
     runs-on: ubuntu-latest
+    outputs:
+      image_uri: ${{ steps.save_image_uri.outputs.image_uri }}
     
     steps:
     - name: Checkout code
@@ -42,12 +40,42 @@ jobs:
       id: build_image
       env:
         ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+        ECR_REPOSITORY: ${{ secrets.ECR_REPOSITORY_NAME }}
+        IMAGE_TAG: ${{ github.sha }}
       run: |
-        FULL_IMAGE_URI="${ECR_REGISTRY}/${ECR_REPOSITORY}:${IMAGE_TAG}"
-        echo "Building Docker image: $FULL_IMAGE_URI"
-        docker build -t $FULL_IMAGE_URI .
-        docker push $FULL_IMAGE_URI
-        echo "FULL_IMAGE_URI=${FULL_IMAGE_URI}" >> $GITHUB_ENV
+        docker build -t $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG .
+        docker push $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG
+        echo "IMAGE_URI=$ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG" >> $GITHUB_ENV
+
+    # Explicit step to save the image URI as an output
+    - name: Save image URI for next job
+      id: save_image_uri
+      run: |
+        echo "image_uri=$IMAGE_URI" >> $GITHUB_OUTPUT
+        echo "Image URI saved as: $IMAGE_URI"
+
+  deploy:
+    name: Deploy Infrastructure
+    needs: prepare
+    runs-on: ubuntu-latest
+    outputs:
+      apply_status: ${{ steps.apply.outcome }}
+    env:
+      TF_VAR_api_token_salt: ${{ secrets.API_TOKEN_SALT }}
+      TF_VAR_admin_jwt_secret: ${{ secrets.ADMIN_JWT_SECRET }}
+      TF_VAR_transfer_token_salt: ${{ secrets.TRANSFER_TOKEN_SALT }}
+      TF_VAR_app_keys: ${{ secrets.APP_KEYS }}
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v3
+
+    - name: Configure AWS credentials
+      uses: aws-actions/configure-aws-credentials@v1
+      with:
+        aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+        aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+        aws-region: ${{ secrets.AWS_REGION }}
 
     - name: Setup Terraform
       uses: hashicorp/setup-terraform@v2
@@ -58,25 +86,14 @@ jobs:
       id: init
       working-directory: ./Terraform-blue-green-deployment
       run: terraform init
-      env:
-        AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
-        AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-        TF_VAR_api_token_salt: ${{ secrets.API_TOKEN_SALT }}
-        TF_VAR_admin_jwt_secret: ${{ secrets.ADMIN_JWT_SECRET }}
-        TF_VAR_transfer_token_salt: ${{ secrets.TRANSFER_TOKEN_SALT }}
-        TF_VAR_app_keys: ${{ secrets.APP_KEYS }}
 
     - name: Terraform Plan
       id: plan
       working-directory: ./Terraform-blue-green-deployment
       run: terraform plan -out=tfplan 
       env:
-        TF_VAR_ecr_repo_name: ${{ env.ECR_REPOSITORY }}
-        TF_VAR_image_tag: ${{ env.IMAGE_TAG }}
-        TF_VAR_api_token_salt: ${{ secrets.API_TOKEN_SALT }}
-        TF_VAR_admin_jwt_secret: ${{ secrets.ADMIN_JWT_SECRET }}
-        TF_VAR_transfer_token_salt: ${{ secrets.TRANSFER_TOKEN_SALT }}
-        TF_VAR_app_keys: ${{ secrets.APP_KEYS }}
+        TF_VAR_ecr_repo_name: ${{ secrets.ECR_REPOSITORY_NAME }}
+        TF_VAR_image_tag: ${{ github.sha }}
 
     - name: Terraform Apply
       id: apply
@@ -84,28 +101,72 @@ jobs:
       run: |
         terraform apply -auto-approve tfplan
       env:
-        TF_VAR_ecr_repo_name: ${{ env.ECR_REPOSITORY }}
-        TF_VAR_image_tag: ${{ env.IMAGE_TAG }}
-        TF_VAR_api_token_salt: ${{ secrets.API_TOKEN_SALT }}
-        TF_VAR_admin_jwt_secret: ${{ secrets.ADMIN_JWT_SECRET }}
-        TF_VAR_transfer_token_salt: ${{ secrets.TRANSFER_TOKEN_SALT }}
-        TF_VAR_app_keys: ${{ secrets.APP_KEYS }}
+        TF_VAR_ecr_repo_name: ${{ secrets.ECR_REPOSITORY_NAME }}
+        TF_VAR_image_tag: ${{ github.sha }}
 
+  deploy_new_version:
+    name: Deploy New Version with Blue/Green
+    needs: [prepare, deploy]
+    runs-on: ubuntu-latest
+    if: needs.deploy.outputs.apply_status == 'success'
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v3
+
+    - name: Configure AWS credentials
+      uses: aws-actions/configure-aws-credentials@v1
+      with:
+        aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+        aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+        aws-region: ${{ secrets.AWS_REGION }}
+    
+    # Debug step to check what we're receiving
+    - name: Debug output passed values
+      run: |
+        echo "Received image URI: '${{ needs.prepare.outputs.image_uri }}'"
+        
+    # Step to manually construct the image URI if needed
+    - name: Construct image URI
+      id: construct_image
+      run: |
+        # Login to ECR to get the registry URL
+        aws ecr get-login-password | docker login --username AWS --password-stdin $(aws ecr describe-repositories --repository-names ${{ secrets.ECR_REPOSITORY_NAME }} --query 'repositories[0].repositoryUri' --output text | sed 's/\/.*//')
+        
+        # Construct the full image URI
+        ECR_REGISTRY=$(aws ecr describe-repositories --repository-names ${{ secrets.ECR_REPOSITORY_NAME }} --query 'repositories[0].repositoryUri' --output text | sed 's/\/.*//')
+        IMAGE_URI="${ECR_REGISTRY}/${{ secrets.ECR_REPOSITORY_NAME }}:${{ github.sha }}"
+        echo "IMAGE_URI=${IMAGE_URI}" >> $GITHUB_ENV
+        echo "Using constructed image URI: ${IMAGE_URI}"
+    
     - name: Register new task definition for CodeDeploy
       id: register_task_def
       run: |
         # Get current task definition
         TASK_DEFINITION=$(aws ecs describe-task-definition --task-definition ${{ secrets.TASK_DEFINITION_NAME }} --query 'taskDefinition' --output json)
         
-        # Print debugging info
-        echo "Using Docker image: '$FULL_IMAGE_URI'"
+        # Check if we have a passed image URI
+        if [ -n "${{ needs.prepare.outputs.image_uri }}" ]; then
+          DOCKER_IMAGE="${{ needs.prepare.outputs.image_uri }}"
+          echo "Using passed image URI: ${DOCKER_IMAGE}"
+        else
+          DOCKER_IMAGE="${IMAGE_URI}"
+          echo "Using constructed image URI: ${DOCKER_IMAGE}"
+        fi
         
         # Update the task definition with the new image
-        TASK_DEFINITION=$(echo $TASK_DEFINITION | jq --arg IMAGE "$FULL_IMAGE_URI" '.containerDefinitions[0].image = $IMAGE')        
+        echo "Final Docker image being used: ${DOCKER_IMAGE}"
+        TASK_DEFINITION=$(echo $TASK_DEFINITION | jq --arg IMAGE "${DOCKER_IMAGE}" '.containerDefinitions[0].image = $IMAGE')        
         TASK_DEFINITION=$(echo $TASK_DEFINITION | jq 'del(.taskDefinitionArn, .revision, .status, .requiresAttributes, .compatibilities, .registeredAt, .registeredBy)')        
+        
+        # Debug: Output the task definition before registering
+        echo "Task definition to register:"
+        echo $TASK_DEFINITION | jq .
+        
         NEW_TASK_DEF=$(aws ecs register-task-definition --cli-input-json "$TASK_DEFINITION")        
         NEW_TASK_DEF_ARN=$(echo $NEW_TASK_DEF | jq -r '.taskDefinition.taskDefinitionArn')
-        echo "NEW_TASK_DEF_ARN=${NEW_TASK_DEF_ARN}" >> $GITHUB_ENV
+        echo "TASK_DEF_ARN=${NEW_TASK_DEF_ARN}" >> $GITHUB_ENV
+        echo "task_definition_arn=${NEW_TASK_DEF_ARN}" >> $GITHUB_OUTPUT
 
     - name: Create appspec.json file
       run: |
@@ -116,7 +177,7 @@ jobs:
               "TargetService": {
                 "Type": "AWS::ECS::Service",
                 "Properties": {
-                  "TaskDefinition": "'"$NEW_TASK_DEF_ARN"'",
+                  "TaskDefinition": "'"$TASK_DEF_ARN"'",
                   "LoadBalancerInfo": {
                     "ContainerName": "strapi-app",
                     "ContainerPort": 1337
