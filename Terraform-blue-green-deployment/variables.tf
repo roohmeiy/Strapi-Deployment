@@ -1,46 +1,55 @@
 variable "aws_region" {
   description = "The AWS region to deploy to"
   type        = string
+  default = "us-east-1"
 }
 
 variable "vpc_name" {
   description = "The name of the VPC"
   type        = string
+  default = "payal-strapi-vpc"
 }
 
 variable "igw_name" {
   description = "The name of the Internet Gateway"
   type        = string
+  default = "payal-strapi-igw"
 }
 
 variable "ecs_cluster_name" {
   description = "The name of the ECS Cluster"
   type        = string
+  default = "payal-strapi-ecs-cluster"
 }
 
 variable "task_definition_name" {
   description = "The name of the ECS Task Definition"
   type        = string
+  default = "payal-strapi-taskdef"
 }
 
 variable "security_group_name" {
   description = "The name of the Security Group"
   type        = string
+  default = "payal-strapi-sg"
 }
 
 variable "alb_name" {
   description = "The name of the Application Load Balancer"
   type        = string
+  default = "payal-strapi-alb"
 }
 
 variable "target_group_name" {
   description = "The name of the Load Balancer Target Group"
   type        = string
+  default = "payal-strapi-alb"
 }
 
 variable "ecs_service_name" {
   description = "The name of the ECS Service"
   type        = string
+  default = "payal-strapi-ecs-service"
 }
 
 variable "api_token_salt" {
@@ -72,6 +81,7 @@ variable "app_keys" {
 variable "ecr_repo_name" {
   description = "Name of the ECR repository"
   type        = string
+  default = "payal-strapi-app"
 }
 variable "image_tag" {
   description = "Tag of the Docker image to deploy"
