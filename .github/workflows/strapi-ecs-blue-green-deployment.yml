@@ -201,7 +201,6 @@ jobs:
           --deployment-group-name ${{ secrets.CODEDEPLOY_DEPLOYMENT_GROUP }} \
           --s3-location bucket=${{ secrets.S3_BUCKET_NAME }},bundleType=JSON,key=appspec.json \
           --deployment-config-name CodeDeployDefault.ECSCanary10Percent5Minutes \
-          --file-exists-behavior OVERWRITE \
           --query 'deploymentId' --output text)
         
         echo "Deployment ID: $DEPLOYMENT_ID"
