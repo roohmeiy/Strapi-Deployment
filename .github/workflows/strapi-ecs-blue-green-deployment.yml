@@ -197,8 +197,8 @@ jobs:
       id: trigger_codedeploy
       run: |
         DEPLOYMENT_ID=$(aws deploy create-deployment \
-          --application-name ${{ secrets.CODEDEPLOY_APP_NAME }} \
-          --deployment-group-name ${{ secrets.CODEDEPLOY_DEPLOYMENT_GROUP_NAME }} \
+          --application-name ${{ secrets.CODEDEPLOY_APPLICATION_NAME }} \
+          --deployment-group-name ${{ secrets.CODEDEPLOY_DEPLOYMENT_GROUP }} \
           --s3-location bucket=${{ secrets.S3_BUCKET_NAME }},bundleType=JSON,key=appspec.json \
           --deployment-config-name CodeDeployDefault.ECSCanary10Percent5Minutes \
           --file-exists-behavior OVERWRITE \
